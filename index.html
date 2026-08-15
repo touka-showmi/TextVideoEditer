@@ -1601,8 +1601,13 @@
   }
 
   exportBtn.addEventListener('click', async () => {
-    if (!sourceVideo.src || !Number.isFinite(sourceVideo.duration)) {
+    if (!sourceVideo.src || !Number.isFinite(sourceVideo.duration) || sourceVideo.duration <= 0) {
       alert('先に動画ファイルを読み込んでください。');
+      return;
+    }
+
+    if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) {
+      alert('このブラウザは動画エンコードに必要な機能に対応していません。Chrome / Edge の最新版を使用してください。');
       return;
     }
 
@@ -1610,19 +1615,36 @@
     stopAllActiveAudioSources();
 
     exportBtn.disabled = true;
-    exportBtn.textContent = '合成エンコード中...';
-    statusText.textContent = '動画と音声をミキシングしてエンコード中...';
+    exportBtn.textContent = '合成エンコード中... 0%';
+    statusText.textContent = '動画と音声をミキシングしてエンコード中... 0%';
 
     let mediaRecorder = null;
     let exportCanvasStream = null;
     let audioDest = null;
     let exportAudioSourceNodes = [];
+    let mimeType = '';
+    let stoppedByVideoEnd = false;
+    let exportProgressTimer = null;
+    let exportStage = '準備中';
+    let dataChunkCount = 0;
+    let totalRecordedBytes = 0;
+
+    const setExportStage = (stage, detail = '') => {
+      exportStage = stage;
+      const suffix = detail ? ` — ${detail}` : '';
+      statusText.textContent = `エンコード: ${stage}${suffix}`;
+      exportBtn.textContent = `合成エンコード中... ${stage}`;
+    };
+
+    // UIを確実に再描画してから次の重い処理へ進む。
+    const yieldToBrowser = () => new Promise(resolve => requestAnimationFrame(() => resolve()));
 
     try {
-      // フォントのロード完了を待ってから、プレビューと同じ描画関数を使う。
+      setExportStage('準備中', 'Canvas / MediaStream / 音声を初期化');
       await document.fonts.ready;
 
       const actx = getAudioContext();
+      await actx.resume();
       audioDest = actx.createMediaStreamDestination();
 
       // MediaElementSource は同じ <video> に対して一度だけ生成する。
@@ -1633,95 +1655,305 @@
       mediaElementSourceNode.connect(audioDest);
       mediaElementSourceNode.connect(actx.destination);
 
+      setExportStage('録画ストリーム作成中', 'Canvasから映像トラックを取得');
       exportCanvasStream = canvas.captureStream(30);
-      const combinedTracks = [
-        ...exportCanvasStream.getVideoTracks(),
-        ...audioDest.stream.getAudioTracks()
+      const videoTracks = exportCanvasStream.getVideoTracks();
+      const audioTracks = audioDest.stream.getAudioTracks();
+      if (!videoTracks.length || !audioTracks.length) {
+        throw new Error('録画用の映像・音声トラックを作成できませんでした。');
+      }
+
+      const combinedStream = new MediaStream([...videoTracks, ...audioTracks]);
+      setExportStage('録画形式確認中', `${videoTracks.length}映像 + ${audioTracks.length}音声トラック`);
+
+      // MediaRecorder API が存在するかを最初に明示確認。
+      if (typeof MediaRecorder === 'undefined') {
+        throw new Error('このブラウザでは MediaRecorder API が利用できません。Chrome / Edge の最新版で開いてください。');
+      }
+      if (typeof MediaRecorder.isTypeSupported !== 'function') {
+        throw new Error('このブラウザの MediaRecorder は形式判定 API (isTypeSupported) を提供していません。');
+      }
+
+      // 対応形式を1つずつ確認し、判定中に例外が出ても原因を失わない。
+      const mimeCandidates = [
+        'video/webm;codecs=vp8,opus',
+        'video/webm;codecs=vp9,opus',
+        'video/webm',
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+        'video/mp4'
       ];
-      const combinedStream = new MediaStream(combinedTracks);
+      const supportResults = [];
+      for (const candidate of mimeCandidates) {
+        let supported = false;
+        try {
+          supported = MediaRecorder.isTypeSupported(candidate);
+        } catch (e) {
+          supportResults.push(`${candidate}: 判定エラー (${e.message || e})`);
+          continue;
+        }
+        supportResults.push(`${candidate}: ${supported ? '対応' : '非対応'}`);
+      }
 
-      let mimeType = 'video/webm;codecs=vp9,opus';
-      if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/mp4';
+      const supportedMimeTypes = [];
+      for (const candidate of mimeCandidates) {
+        try {
+          if (MediaRecorder.isTypeSupported(candidate)) supportedMimeTypes.push(candidate);
+        } catch (e) {}
+      }
 
-      mediaRecorder = new MediaRecorder(combinedStream, { mimeType });
+      setExportStage('録画形式確認中', supportResults.join(' / '));
+
+      mimeType = supportedMimeTypes[0] || '';
+      if (!mimeType) {
+        throw new Error(`対応する録画形式がありません。
+${supportResults.join('\n')}`);
+      }
+
+      // コンストラクタ段階でも失敗し得るため、ここを独立して捕捉する。
+      setExportStage('MediaRecorder生成中', `採用形式: ${mimeType}`);
+      try {
+        // 固定ビットレートを指定すると、ブラウザ実装によっては
+        // 対応形式でもMediaRecorder生成に失敗することがあるため、
+        // まずはMIMEタイプだけを指定する。
+        mediaRecorder = new MediaRecorder(combinedStream, { mimeType });
+      } catch (primaryError) {
+        const failures = [`${mimeType} (MIME指定あり): ${primaryError.message || primaryError}`];
+        let created = false;
+
+        // 同じ形式でオプションなしの生成を試す。
+        try {
+          mediaRecorder = new MediaRecorder(combinedStream);
+          mimeType = mediaRecorder.mimeType || mimeType;
+          created = true;
+          setExportStage('MediaRecorder生成完了', `形式指定なしで生成: ${mimeType}`);
+        } catch (fallbackError) {
+          failures.push(`デフォルト形式: ${fallbackError.message || fallbackError}`);
+        }
+
+        // それでも失敗した場合のみ、他の対応形式を順番に試す。
+        if (!created) {
+          for (const candidate of supportedMimeTypes.slice(1)) {
+            try {
+              mediaRecorder = new MediaRecorder(combinedStream, { mimeType: candidate });
+              mimeType = candidate;
+              created = true;
+              break;
+            } catch (retryError) {
+              failures.push(`${candidate}: ${retryError.message || retryError}`);
+            }
+          }
+        }
+
+        if (!created) {
+          // ストリームの構成も同時に記録して、原因を特定できるようにする。
+          const trackInfo = combinedStream.getTracks().map(t =>
+            `${t.kind}:${t.readyState}:${t.label || 'unnamed'}`
+          ).join(' / ');
+          throw new Error(
+            `MediaRecorderの生成に失敗しました。\n` +
+            `${failures.join('\n')}\n` +
+            `Stream=${combinedStream.active ? 'active' : 'inactive'} / ${trackInfo}`
+          );
+        }
+      }
+      setExportStage('MediaRecorder生成完了', `実際の形式: ${mediaRecorder.mimeType || mimeType}`);
+      await yieldToBrowser();
+
+      setExportStage('録画コールバック設定中', 'MediaRecorderのイベントを登録');
+      await yieldToBrowser();
+
       const chunks = [];
-
+      mediaRecorder.onstart = () => {
+        setExportStage('録画中', `MediaRecorder開始 — ${mimeType}`);
+      };
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
+        if (e.data && e.data.size > 0) {
+          chunks.push(e.data);
+          dataChunkCount += 1;
+          totalRecordedBytes += e.data.size;
+          const mb = totalRecordedBytes / (1024 * 1024);
+          setExportStage('録画中', `${dataChunkCount}チャンク受信 / ${mb.toFixed(2)} MB`);
+        }
       };
 
       const finished = new Promise((resolve, reject) => {
-        mediaRecorder.onstop = resolve;
-        mediaRecorder.onerror = (e) => reject(e.error || new Error('MediaRecorder error'));
+        mediaRecorder.addEventListener('stop', () => {
+          setExportStage('録画停止完了', `受信済み ${dataChunkCount}チャンク / ${(totalRecordedBytes / (1024 * 1024)).toFixed(2)} MB`);
+          resolve();
+        }, { once: true });
+        mediaRecorder.addEventListener('error', (e) => {
+          reject(e.error || new Error('MediaRecorder error'));
+        }, { once: true });
       });
 
-      // 動画の「実際の再生開始」を基準点にしてから音声を予約する。
+      // 録画前に必ず時刻0へ戻し、最初のフレームをCanvasへ描画しておく。
+      setExportStage('動画を先頭へ移動中', `現在 ${Number.isFinite(sourceVideo.currentTime) ? sourceVideo.currentTime.toFixed(3) : '0.000'}秒`);
+      await yieldToBrowser();
       sourceVideo.pause();
       sourceVideo.currentTime = 0;
-      await new Promise(resolve => {
-        if (sourceVideo.readyState >= 2) resolve();
-        else sourceVideo.addEventListener('loadeddata', resolve, { once: true });
+      await yieldToBrowser();
+      setExportStage('動画データ確認中', `readyState=${sourceVideo.readyState}`);
+      await yieldToBrowser();
+      await new Promise((resolve, reject) => {
+        if (sourceVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          resolve();
+          return;
+        }
+        const onLoaded = () => { cleanup(); resolve(); };
+        const onError = () => { cleanup(); reject(new Error('動画データを読み込めませんでした。')); };
+        const cleanup = () => {
+          sourceVideo.removeEventListener('loadeddata', onLoaded);
+          sourceVideo.removeEventListener('error', onError);
+        };
+        sourceVideo.addEventListener('loadeddata', onLoaded, { once: true });
+        sourceVideo.addEventListener('error', onError, { once: true });
       });
 
-      await sourceVideo.play();
-      await new Promise(requestAnimationFrame);
+      setExportStage('先頭フレーム描画中');
+      await yieldToBrowser();
+      videoTrainedDraw();
+      telopList.forEach(t => drawSingleTelop(ctx, canvas, t, 0, performance.now()));
+      await yieldToBrowser();
 
-      const exportStartAudioTime = actx.currentTime;
+      // 録画を先に開始し、音声と動画を同じAudioContext上の基準時刻から動かす。
+      const preRoll = 0.08;
+      const exportStartAudioTime = actx.currentTime + preRoll;
+      setExportStage('録画開始直前', `state=${mediaRecorder.state}`);
+      await yieldToBrowser();
+      setExportStage('録画開始', 'MediaRecorder.start() を実行');
+      await yieldToBrowser();
+      mediaRecorder.start(100);
+      setExportStage('録画開始完了', `state=${mediaRecorder.state}, mime=${mediaRecorder.mimeType || mimeType}`);
+      await yieldToBrowser();
 
       audioList.forEach(a => {
-        if (!a.buffer) return;
+        if (!a.buffer || !Number.isFinite(a.buffer.duration) || a.buffer.duration <= 0) return;
         const startOffset = Math.max(0, Number(a.startTime) || 0);
+        if (startOffset >= sourceVideo.duration + a.buffer.duration) return;
+
         const srcNode = actx.createBufferSource();
         const gainNode = actx.createGain();
-
         srcNode.buffer = a.buffer;
         gainNode.gain.value = Math.max(0, Math.min(1, Number(a.volume) || 0));
         srcNode.connect(gainNode);
         gainNode.connect(audioDest);
         gainNode.connect(actx.destination);
-
         srcNode.start(exportStartAudioTime + startOffset);
         exportAudioSourceNodes.push(srcNode);
       });
 
-      mediaRecorder.start();
+      // 動画の再生を録画開始直後に開始する。play() の完了を待ってから描画ループへ入る。
+      setExportStage('動画再生開始中', `currentTime=${sourceVideo.currentTime.toFixed(3)}`);
+      await yieldToBrowser();
+      try {
+        await sourceVideo.play();
+      } catch (playError) {
+        throw new Error(`動画再生開始に失敗しました: ${playError.message || playError}`);
+      }
+      setExportStage('動画再生開始完了', `currentTime=${sourceVideo.currentTime.toFixed(3)}`);
+      await yieldToBrowser();
+      await new Promise(requestAnimationFrame);
 
-      // 書き出しもプレビューも「動画 currentTime」を唯一のタイムラインとして使用する。
+      // 進捗表示用。動画 currentTime はブラウザやデコード状況によって
+      // 一時的に 0 のままになることがあるため、実際の再生開始時刻も併用する。
+      const exportProgressStart = performance.now();
+
+      const stopRecorder = () => {
+        if (stoppedByVideoEnd) return;
+        stoppedByVideoEnd = true;
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          setExportStage('録画停止中', `受信済み ${dataChunkCount}チャンク / ${(totalRecordedBytes / (1024 * 1024)).toFixed(2)} MB`);
+          try { mediaRecorder.requestData(); } catch (e) {}
+          mediaRecorder.stop();
+        }
+      };
+
+      const onEnded = () => stopRecorder();
+      sourceVideo.addEventListener('ended', onEnded, { once: true });
+
+      let lastProgress = -1;
+      function updateExportProgress(timelineTime, forceComplete = false) {
+        const duration = Number(sourceVideo.duration);
+        if (!(duration > 0)) return;
+
+        const currentTime = Number.isFinite(timelineTime) ? Math.max(0, timelineTime) : 0;
+        const elapsedTime = Math.max(0, (performance.now() - exportProgressStart) / 1000);
+        // currentTime と経過時間のうち、進んでいる方を採用する。
+        const safeTime = forceComplete
+          ? duration
+          : Math.min(duration, Math.max(currentTime, elapsedTime));
+        const progress = Math.max(0, Math.min(100, Math.round((safeTime / duration) * 1000) / 10));
+
+        // 同じ値を何度もDOMへ書き込まない。
+        if (progress !== lastProgress) {
+          lastProgress = progress;
+          exportBtn.textContent = `合成エンコード中... ${progress.toFixed(1)}%`;
+          statusText.textContent = `動画と音声をミキシングしてエンコード中... ${progress.toFixed(1)}%`;
+        }
+      }
+
+      // requestAnimationFrame が一時停止・遅延しても進捗表示だけは更新する。
+      exportProgressTimer = setInterval(() => {
+        if (stoppedByVideoEnd) return;
+        updateExportProgress(getTimelineTime());
+      }, 100);
+
       function renderLoop() {
+        if (stoppedByVideoEnd) return;
         if (!sourceVideo.ended && !sourceVideo.paused) {
-          const timelineTime = getTimelineTime();
+          const timelineTime = Math.min(Math.max(getTimelineTime(), 0), sourceVideo.duration);
+          updateExportProgress(timelineTime);
           videoTrainedDraw();
           telopList.forEach(t =>
             drawSingleTelop(ctx, canvas, t, timelineTime, performance.now())
           );
           requestAnimationFrame(renderLoop);
-        } else if (mediaRecorder.state !== 'inactive') {
-          mediaRecorder.stop();
+        } else {
+          updateExportProgress(sourceVideo.duration, sourceVideo.ended);
+          if (sourceVideo.ended) updateExportProgress(sourceVideo.duration, true);
+          stopRecorder();
         }
       }
 
-      // 最初のフレームを時刻0で確実に描画してから録画ループ開始。
-      videoTrainedDraw();
-      telopList.forEach(t => drawSingleTelop(ctx, canvas, t, 0, performance.now()));
       renderLoop();
-
       await finished;
+      updateExportProgress(sourceVideo.duration, true);
+      setExportStage('データ受信完了', `${dataChunkCount}チャンク / ${(totalRecordedBytes / (1024 * 1024)).toFixed(2)} MB`);
 
-      const videoURL = URL.createObjectURL(new Blob(chunks, { type: mimeType }));
+      // 念のため、動画側も停止して書き出し終了状態を確定する。
+      sourceVideo.pause();
+      sourceVideo.currentTime = Math.min(sourceVideo.duration, sourceVideo.currentTime);
+
+      setExportStage('Blob生成中', `受信済み ${dataChunkCount}チャンクを結合`);
+      const blob = new Blob(chunks, { type: mimeType });
+      if (!blob.size) throw new Error('エンコードされたデータが空でした。MediaRecorderからデータを受信できませんでした。');
+      setExportStage('Blob生成完了', `${(blob.size / (1024 * 1024)).toFixed(2)} MB`);
+
+      const videoURL = URL.createObjectURL(blob);
+      if (outputVideo.src) URL.revokeObjectURL(outputVideo.src);
       outputVideo.src = videoURL;
       outputVideo.style.display = 'block';
+      outputVideo.load();
 
+      const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
       const downloadLink = document.createElement('a');
       downloadLink.href = videoURL;
-      downloadLink.download = `mixed_video.${mimeType.includes('mp4') ? 'mp4' : 'webm'}`;
+      downloadLink.download = `mixed_video.${extension}`;
+      document.body.appendChild(downloadLink);
       downloadLink.click();
+      downloadLink.remove();
 
-      statusText.textContent = '書き出し完了！';
+      statusText.textContent = `書き出し完了！ (${mimeType}) — ${(blob.size / (1024 * 1024)).toFixed(2)} MB`;
     } catch (err) {
       console.error(err);
-      statusText.textContent = '書き出し中にエラーが発生しました。';
+      statusText.textContent = `エンコード失敗 — 段階: ${exportStage} — ${err.message || err}`;
       alert(`書き出しに失敗しました：${err.message || err}`);
     } finally {
+      if (exportProgressTimer) {
+        clearInterval(exportProgressTimer);
+        exportProgressTimer = null;
+      }
+
       exportAudioSourceNodes.forEach(src => {
         try { src.stop(); } catch (e) {}
         try { src.disconnect(); } catch (e) {}
