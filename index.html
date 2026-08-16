@@ -78,10 +78,11 @@
       transition: background 0.3s, color 0.3s;
     }
     .container {
-      max-width: 1100px; margin: 0 auto;
+         max-width: 1400px; margin: 0 auto;
       background: var(--card-bg); padding: 25px;
       border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);
       transition: background 0.3s;
+      width: 100%; box-sizing: border-box;
     }
     .header-area {
       display: flex; justify-content: space-between; align-items: center;
@@ -91,7 +92,7 @@
     .layout-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
     @media (max-width: 900px) { .layout-grid { grid-template-columns: 1fr; } }
     
-    .preview-section { display: flex; flex-direction: column; align-items: center; width: 100%; }
+    .preview-section { display: flex; flex-direction: column; align-items: center; width: 100%; box-sizing: border-box; }
     canvas {
       border: 2px solid var(--border-color); max-width: 100%; height: auto;
       display: block; margin: 10px 0 5px 0; background: #000; border-radius: 8px;
@@ -101,26 +102,39 @@
       background: var(--sub-bg); padding: 10px; border-radius: 8px;
       border: 1px solid var(--border-color); box-sizing: border-box;
     }
-    .button-row { display: flex; gap: 4px; width: 100%; justify-content: space-between; }
-    .player-controls button { padding: 6px 4px; font-size: 12px; background: var(--button-bg); color: white; min-height: 30px; flex: 1; border-radius: 6px; }
+       .button-row { display: flex; flex-wrap: wrap; gap: 4px; width: 100%; justify-content: space-between; }
+    .player-controls button { padding: 6px 4px; font-size: 12px; background: var(--button-bg); color: white; min-height: 30px; flex: 1 1 auto; border-radius: 6px; }
     .player-controls button:hover:not(:disabled) { background: var(--button-hover); }
     .seekbar-row { display: flex; align-items: center; gap: 8px; width: 100%; }
-    #seekBar { flex-grow: 1; cursor: pointer; height: 24px; margin: 0; }
+    #seekBar { flex-grow: 1; cursor: pointer; height: 24px; margin: 0; min-width: 0; }
     #timeDisplay { font-size: 12px; font-variant-numeric: tabular-nums; min-width: 75px; text-align: right; }
 
-    .control-group { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; width: 100%; align-items: center; }
+    .control-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 15px;
+      width: 100%;
+      align-items: center; 
+    }
+    .control-group > * {
+      flex: 1 1 220px;
+      min-width: 0; 
+      box-sizing: border-box;
+}
+
     input[type="text"], input[type="number"], input[type="file"] {
       padding: 8px 12px; font-size: 14px; background-color: var(--input-bg);
       color: var(--input-text); border: 1px solid var(--border-color);
-      border-radius: 8px; box-sizing: border-box; transition: all 0.2s ease;
+      border-radius: 8px; box-sizing: border-box; transition: all 0.2s ease; width: 100%;
     }
     input[type="text"]:focus, input[type="number"]:focus { outline: none; border-color: var(--accent-color); box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25); }
     input[type="file"] { background: var(--input-bg); }
-    input[type="color"] { padding: 2px; height: 38px; width: 100%; max-width: 80px; cursor: pointer; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; }
+    input[type="color"] { padding: 2px; height: 38px; width: 100%; cursor: pointer; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; }
     
     button {
       cursor: pointer; background: #0284c7; color: white; border: none; font-weight: bold;
-      transition: background 0.2s, transform 0.1s; border-radius: 20px; padding: 8px 16px; font-size: 13px;
+      transition: background 0.2s, transform 0.1s; border-radius: 20px; padding: 8px 16px; font-size: 13px; white-space: nowrap;
     }
     button:active:not(:disabled) { transform: scale(0.97); }
     button:hover:not(:disabled) { background: #0369a1; }
@@ -129,8 +143,8 @@
     .btn-add { background: #16a34a; } .btn-add:hover:not(:disabled) { background: #15803d; }
     .btn-gray { background: var(--button-bg); color: #fff; } .btn-gray:hover:not(:disabled) { background: var(--button-hover); }
 
-    .tab-container { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid var(--border-color); margin-bottom: 12px; gap: 10px; }
-    .tab-left { display: flex; gap: 4px; }
+    .tab-container { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid var(--border-color); margin-bottom: 12px; gap: 10px; }
+    .tab-left { display: flex; gap: 4px; flex-wrap: wrap; }
     .tab-right-actions { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
     .tab-btn {
       padding: 10px 16px; background: var(--sub-bg); color: var(--muted-text);
@@ -142,7 +156,7 @@
       border-color: var(--accent-color); border-bottom: 2px solid var(--card-bg); margin-bottom: -2px;
     }
 
-    .editor-section { display: flex; flex-direction: column; gap: 15px; }
+    .editor-section { display: flex; flex-direction: column; gap: 15px; width: 100%; box-sizing: border-box; }
     .panel-content { display: flex; flex-direction: column; gap: 15px; }
     .panel-content.hidden { display: none; }
 
@@ -161,8 +175,7 @@
     .form-group { display: flex; flex-direction: column; gap: 6px; }
     label { font-size: 12px; color: var(--muted-text); font-weight: bold; }
 
-    .custom-select-wrapper { position: relative; user-select: none; width: 18em; max-width: 100%; box-sizing: border-box; }
-    #loadedAudioPoolSelect { min-width: 14em; }
+    .custom-select-wrapper { position: relative; user-select: none; width: 100%; max-width: 100%; box-sizing: border-box; }
     .custom-select-trigger {
       display: flex; justify-content: space-between; align-items: center; padding: 8px 16px;
       background-color: var(--input-bg); color: var(--input-text); border: 1px solid var(--border-color);
@@ -190,9 +203,20 @@
     @media (max-width: 600px) {
       body { padding: 8px; } .container { padding: 12px; }
       .header-area { flex-direction: column; align-items: flex-start; gap: 8px; }
+      
       .control-group { flex-direction: column; align-items: stretch; }
-      .control-group input[type="file"], .control-group button, .custom-select-wrapper { width: 100%; }
+      .control-group > * { width: 100%; margin-bottom: 4px; }
+      
       .editor-form { grid-template-columns: 1fr; } .form-group-full { grid-column: span 1; }
+      
+      .tab-container { flex-direction: column; align-items: stretch; border-bottom: none; }
+      .tab-left { border-bottom: 2px solid var(--border-color); padding-bottom: 5px; flex-wrap: nowrap; }
+      .tab-btn { flex: 1; text-align: center; border-radius: 8px 8px 0 0; }
+      .tab-right-actions { flex-direction: column; align-items: stretch; gap: 8px; padding-top: 8px; }
+      .tab-right-actions button, .tab-right-actions input, .tab-right-actions .custom-select-wrapper { width: 100%; margin-bottom: 0; }
+      
+      .player-controls button { min-height: 40px; }
+      button { padding: 10px 16px; }
     }
   </style>
 </head>
@@ -200,7 +224,7 @@
 
 <div class="container">
   <div class="header-area">
-    <h2>マルチテロップ・高度動画エクスポートツール</h2>
+    <h2>TextVideoEditer Ver.2.0</h2>
     <button id="themeToggleBtn" class="btn-gray"> ☀ / ☽切替 </button>
   </div>
 
@@ -208,11 +232,11 @@
     <input type="file" id="videoInput" accept="video/*">
     <select id="aspectRatioSelect">
       <option value="16:9">横長 (16:9 標準)</option>
-      <option value="9:16">縦長 (9:16 ショート/TikTok用)</option>
+      <option value="9:16">縦長 (9:16 ショート用)</option>
       <option value="1:1">正方形 (1:1 スクエア)</option>
       <option value="4:5">縦長 (4:5 ポートレート)</option>
     </select>
-    <button id="exportBtn" disabled>動画を再生・合成・書き出し</button>
+    <button id="exportBtn" disabled>動画を合成・書き出し</button>
   </div>
 
   <div class="layout-grid">
@@ -256,7 +280,6 @@
           <button id="importAudioTxtBtn" class="btn-gray">読込(txt)</button>
           <button id="exportAudioTxtBtn" class="btn-gray">書出(txt)</button>
           <input type="file" id="audioTxtInput" accept=".txt" style="display: none;">
-          <!-- iOS Safari対策: MIMEだけでなくMP3/WAV拡張子を明示 -->
           <input type="file" id="audioFileInput" accept=".mp3,.wav,audio/mpeg,audio/wav,audio/x-wav,audio/wave" multiple style="display: none;">
           
           <select id="loadedAudioPoolSelect">
