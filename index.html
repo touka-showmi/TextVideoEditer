@@ -347,6 +347,10 @@
             <input type="number" id="editY" step="5">
           </div>
           <div class="form-group">
+            <label>角度 (-180 〜 180°)</label>
+            <input type="number" id="editAngle" step="1" value="0">
+          </div>
+          <div class="form-group">
             <label>グラデーション色 1</label>
             <input type="color" id="editGradColor1">
           </div>
@@ -574,7 +578,7 @@
   let telopList = [
     {
       id: 1, text: 'マルチテロップ動画編集ツール', startTime: 0.0, endTime: 3.0, fontFamily: DEFAULT_FONT_FAMILY, fontSize: 40,
-      x: 0, y: 0, useGradient: true, gradColor1: '#FF007F', gradColor2: '#00F0FF', gradAngle: 45,
+      x: 0, y: 0, rotation: 0, useGradient: true, gradColor1: '#FF007F', gradColor2: '#00F0FF', gradAngle: 45,
       strokeColor: DEFAULT_EDGE_COLOR, colorPreset: DEFAULT_COLOR_PRESET, strokeWidth: DEFAULT_STROKE_WIDTH, shadowColor: 'rgba(0, 0, 0, 0.8)', shadowBlur: 8, shadowOffsetX: 3, shadowOffsetY: 3,
       inAnimType: 'pop', inAnimDuration: 0.6, loopAnimType: 'subtleShake', loopSpeed: 1.0, loopIntensity: 1.0
     }
@@ -621,6 +625,7 @@
   const editLoopAnim = document.getElementById('editLoopAnim');
   const editX = document.getElementById('editX');
   const editY = document.getElementById('editY');
+  const editAngle = document.getElementById('editAngle');
   const editGradColor1 = document.getElementById('editGradColor1');
   const editGradColor2 = document.getElementById('editGradColor2');
 
@@ -808,7 +813,9 @@
     if (!target) return;
     editText.value = target.text; editFont.value = target.fontFamily; editEdgeColor.value = target.strokeColor || DEFAULT_EDGE_COLOR; editSize.value = target.fontSize;
     editStrokeWidth.value = target.strokeWidth; editStartTime.value = target.startTime; editEndTime.value = target.endTime; editInAnim.value = target.inAnimType;
-    editLoopAnim.value = target.loopAnimType; editX.value = target.x; editY.value = target.y; editGradColor1.value = target.gradColor1; editGradColor2.value = target.gradColor2;
+    editLoopAnim.value = target.loopAnimType; editX.value = target.x; editY.value = target.y;
+    editAngle.value = Number.isFinite(Number(target.rotation)) ? target.rotation : 0;
+    editGradColor1.value = target.gradColor1; editGradColor2.value = target.gradColor2;
     document.querySelectorAll('#editFont, #editInAnim, #editLoopAnim').forEach(updateCustomSelectDisplay);
   }
 
@@ -819,13 +826,16 @@
     const parsedStroke = parseFloat(editStrokeWidth.value); target.strokeWidth = Number.isFinite(parsedStroke) ? Math.max(0, parsedStroke) : DEFAULT_STROKE_WIDTH;
     target.startTime = parseFloat(editStartTime.value) || 0; target.endTime = parseFloat(editEndTime.value) || 0;
     target.inAnimType = editInAnim.value; target.loopAnimType = editLoopAnim.value; target.x = parseFloat(editX.value) || 0;
-    target.y = parseFloat(editY.value) || 0; target.gradColor1 = editGradColor1.value; target.gradColor2 = editGradColor2.value;
+    target.y = parseFloat(editY.value) || 0;
+    const parsedRotation = parseFloat(editAngle.value);
+    target.rotation = Number.isFinite(parsedRotation) ? Math.max(-180, Math.min(180, parsedRotation)) : 0;
+    target.gradColor1 = editGradColor1.value; target.gradColor2 = editGradColor2.value;
     
     renderTelopListUI();
     if(!isPreviewPlaying) drawPreviewAtTime(target.startTime);
   }
 
-  [editText, editFont, editEdgeColor, editStrokeWidth, editSize, editStartTime, editEndTime, editInAnim, editLoopAnim, editX, editY, editGradColor1, editGradColor2].forEach(elem => {
+  [editText, editFont, editEdgeColor, editStrokeWidth, editSize, editStartTime, editEndTime, editInAnim, editLoopAnim, editX, editY, editAngle, editGradColor1, editGradColor2].forEach(elem => {
     elem.addEventListener('input', syncTelopFormToState); elem.addEventListener('change', syncTelopFormToState);
   });
 
@@ -833,7 +843,7 @@
     const newId = telopList.length > 0 ? Math.max(...telopList.map(t => t.id)) + 1 : 1;
     telopList.push({
       id: newId, text: '新しいテロップ', startTime: 0.0, endTime: 4.0, fontFamily: DEFAULT_FONT_FAMILY, fontSize: DEFAULT_FONT_SIZE,
-      x: 0, y: 0, useGradient: true, gradColor1: '#FFFFFF', gradColor2: '#FFFFFF', gradAngle: 45,
+      x: 0, y: 0, rotation: 0, useGradient: true, gradColor1: '#FFFFFF', gradColor2: '#FFFFFF', gradAngle: 45,
       strokeColor: DEFAULT_EDGE_COLOR, colorPreset: DEFAULT_COLOR_PRESET, strokeWidth: DEFAULT_STROKE_WIDTH, shadowColor: 'rgba(0, 0, 0, 0.8)', shadowBlur: 8, shadowOffsetX: 3, shadowOffsetY: 3,
       inAnimType: 'none', inAnimDuration: 0.5, loopAnimType: 'none', loopSpeed: 1.0, loopIntensity: 1.0
     });
@@ -994,16 +1004,21 @@
           Number.isFinite(Number(t.endTime)) ? Number(t.endTime) : (Number(t.startTime) || 0)
         );
         const endTc = formatSubtitleTimecode(safeEndTime);
+
         const text = String(t.text ?? '').replace(/[\r\n]+/g, ' ').trim();
+        const font = String(t.fontFamily || DEFAULT_FONT_FAMILY).trim() || DEFAULT_FONT_FAMILY;
         const size = Number.parseInt(t.fontSize, 10) || DEFAULT_FONT_SIZE;
         const grad1 = normalizeHexColor(t.gradColor1, DEFAULT_GRAD_COLOR1);
         const grad2 = normalizeHexColor(t.gradColor2, DEFAULT_GRAD_COLOR2);
         const inAnim = String(t.inAnimType || DEFAULT_IN_ANIM).trim() || DEFAULT_IN_ANIM;
         const loopAnim = String(t.loopAnimType || DEFAULT_LOOP_ANIM).trim() || DEFAULT_LOOP_ANIM;
         const edge = normalizeHexColor(t.strokeColor, DEFAULT_EDGE_COLOR);
-        const line = Number.isFinite(t.strokeWidth) ? t.strokeWidth : DEFAULT_STROKE_WIDTH;
+        const line = Number.isFinite(Number(t.strokeWidth)) ? Number(t.strokeWidth) : DEFAULT_STROKE_WIDTH;
+        const x = Number.isFinite(Number(t.x)) ? Number(t.x) : 0;
+        const y = Number.isFinite(Number(t.y)) ? Number(t.y) : 0;
+        const slope = Number.isFinite(Number(t.rotation)) ? Number(t.rotation) : 0;
 
-        return `[${startTc}-${endTc}] text:${text} | size:${size} | grad1:${grad1} | grad2:${grad2} | in:${inAnim} | loop:${loopAnim} | edge:${edge} | line:${line}`;
+        return `[${startTc}-${endTc}] text:${text} | font:${font} | size:${size} | grad1:${grad1} | grad2:${grad2} | in:${inAnim} | loop:${loopAnim} | edge:${edge} | line:${line} | x:${x} | y:${y} | slope:${slope}`;
       });
 
     const blob = new Blob([lines.join('\n')], {
@@ -1020,6 +1035,7 @@
   });
 
   document.getElementById('importTxtBtn').addEventListener('click', () => document.getElementById('txtInput').click());
+
   document.getElementById('txtInput').addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1036,16 +1052,18 @@
         const line = rawLine.trim();
         if (!line) continue;
 
-        // 新形式:
-        // [mm:ss.ms-mm:ss.ms] text:文字列 | size:サイズ | grad1:#... | grad2:#... | in:効果 | loop:効果 | edge:#... | line:2.5
+        // 現行形式:
+        // [mm:ss.ms-mm:ss.ms] text:文字列 | font:Noto Sans JP | size:サイズ |
+        // grad1:#000000 | grad2:#000011 | in:効果 | loop:効果 |
+        // edge:#fcfcfc | line:2.5 | x:0 | y:0 | slope:0
         const rangeMatch = line.match(/^\[([\d:.]+)\s*-\s*([\d:.]+)\]\s*text:(.*)$/i);
 
-        // 旧形式 [mm:ss.ms] も読み込めるように後方互換を維持。
+        // 旧形式も後方互換で読み込む。
         const startOnlyMatch = line.match(/^\[([\d:.]+)\]\s*text:(.*)$/i);
 
-        let startTime;
+        let startTime = 0;
         let endTimeFromFile = null;
-        let payload;
+        let payload = '';
 
         if (rangeMatch) {
           startTime = parseTimecode(rangeMatch[1]);
@@ -1058,11 +1076,10 @@
           continue;
         }
 
-        if (!Number.isFinite(startTime)) startTime = 0;
-
         const parts = payload.split('|').map(v => v.trim());
         const textValue = String(parts.shift() ?? '').trim();
 
+        let fontFamily = DEFAULT_FONT_FAMILY;
         let size = DEFAULT_FONT_SIZE;
         let gradColor1 = DEFAULT_GRAD_COLOR1;
         let gradColor2 = DEFAULT_GRAD_COLOR2;
@@ -1070,11 +1087,18 @@
         let loopAnim = DEFAULT_LOOP_ANIM;
         let edgeColor = DEFAULT_EDGE_COLOR;
         let lineWidth = DEFAULT_STROKE_WIDTH;
+        let x = 0;
+        let y = 0;
+        let rotation = 0;
 
         for (const part of parts) {
           if (!part) continue;
 
-          let match;
+          let match = part.match(/^font\s*:\s*(.*?)$/i);
+          if (match) {
+            fontFamily = String(match[1] || '').trim() || DEFAULT_FONT_FAMILY;
+            continue;
+          }
 
           match = part.match(/^size\s*:\s*(.*?)$/i);
           if (match) {
@@ -1129,17 +1153,50 @@
             }
             continue;
           }
+
+          match = part.match(/^x\s*:\s*(.*?)$/i);
+          if (match) {
+            const parsedX = parseFloat(match[1]);
+            if (Number.isFinite(parsedX)) x = parsedX;
+            continue;
+          }
+
+          match = part.match(/^y\s*:\s*(.*?)$/i);
+          if (match) {
+            const parsedY = parseFloat(match[1]);
+            if (Number.isFinite(parsedY)) y = parsedY;
+            continue;
+          }
+
+          match = part.match(/^slope\s*:\s*(.*?)$/i);
+          if (match) {
+            const parsedRotation = parseFloat(match[1]);
+            if (Number.isFinite(parsedRotation)) {
+              rotation = Math.max(-180, Math.min(180, parsedRotation));
+            }
+            continue;
+          }
+
+          // angle: も予備的に受け付け、内部ではrotationとして統一。
+          match = part.match(/^angle\s*:\s*(.*?)$/i);
+          if (match) {
+            const parsedRotation = parseFloat(match[1]);
+            if (Number.isFinite(parsedRotation)) {
+              rotation = Math.max(-180, Math.min(180, parsedRotation));
+            }
+          }
         }
 
         parsed.push({
           id: index + 1,
           text: textValue,
-          startTime,
-          endTime: endTimeFromFile !== null ? Math.max(startTime, endTimeFromFile) : 0,
-          fontFamily: DEFAULT_FONT_FAMILY,
+          startTime: Number.isFinite(startTime) ? Math.max(0, startTime) : 0,
+          endTime: endTimeFromFile !== null ? Math.max(0, endTimeFromFile) : 0,
+          fontFamily,
           fontSize: size,
-          x: 0,
-          y: 0,
+          x,
+          y,
+          rotation,
           useGradient: true,
           gradColor1,
           gradColor2,
@@ -1167,8 +1224,8 @@
 
       parsed.sort((a, b) => a.startTime - b.startTime);
 
-      // 新形式では終了時間をそのまま保持。
-      // 旧形式では従来通り「次の字幕開始時刻まで」を補完する。
+      // 現行形式では終了時間をそのまま保持。
+      // 旧形式では従来どおり次字幕の開始時刻等から補完。
       parsed.forEach((t, i) => {
         if (t._hasExplicitEndTime) {
           t.endTime = Math.max(t.startTime, t.endTime);
@@ -1189,7 +1246,7 @@
       renderTelopListUI();
       updateTelopFormValues();
       drawPreviewAtTime(telopList[0].startTime);
-      statusText.textContent = `${telopList.length}件の字幕をインポートしました（終了時間を保持）`;
+      statusText.textContent = `${telopList.length}件の字幕をインポートしました（フォント・位置・角度・終了時間を保持）`;
     } catch (err) {
       console.error(err);
       alert('字幕txtの読み込みに失敗しました。');
@@ -1339,6 +1396,11 @@
 
     const canvasX = (canvas.width / 2) + ((t.x + offsetX) * (canvas.width / 480));
     const canvasY = (canvas.height / 2) - ((t.y + offsetY) * (canvas.height / 360));
+
+    // slope は度数法。Canvasのrotate()はラジアンなので変換する。
+    const textRotationDeg = Number.isFinite(Number(t.rotation)) ? Number(t.rotation) : 0;
+    rotation += textRotationDeg * Math.PI / 180;
+
     ctx.save(); ctx.translate(canvasX, canvasY); ctx.rotate(rotation); ctx.scale(scaleX, scaleY);
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
 
