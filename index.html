@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>マルチテロップ・高度動画エクスポートツール</title>
+  <title>TextVideoEditer Ver.2.1</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@700;900&family=Zen+KakuGothic+New:wght@700;900&family=Zen+Old+Mincho:wght@700;900&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -109,19 +109,69 @@
     #seekBar { flex-grow: 1; cursor: pointer; height: 24px; margin: 0; min-width: 0; }
     #timeDisplay { font-size: 12px; font-variant-numeric: tabular-nums; min-width: 75px; text-align: right; }
 
+    /* 上部3操作：標準は縦並び。901px以上で横並び */
     .control-group {
       display: flex;
-      flex-wrap: wrap;
+      flex-direction: column;
+      flex-wrap: nowrap;
       gap: 10px;
       margin-bottom: 15px;
       width: 100%;
-      align-items: center; 
+      align-items: stretch;
     }
     .control-group > * {
-      flex: 1 1 220px;
-      min-width: 0; 
+      min-width: 0;
+      width: 100%;
+      max-width: 100%;
       box-sizing: border-box;
-}
+      flex: 0 0 auto;
+    }
+    .control-group > input[type="file"],
+    .control-group > button,
+    .control-group > .custom-select-wrapper {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+    .control-group .custom-select-trigger {
+      display: flex;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    .control-group .custom-select-options {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    /* 901px以上のみ、上部3操作を左寄せの横一列にする */
+    @media (min-width: 901px) {
+      .control-group {
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-start;
+      }
+      .control-group > input[type="file"] {
+        width: 320px;
+        min-width: 320px;
+        max-width: 320px;
+      }
+      .control-group > button {
+        width: 220px;
+        min-width: 220px;
+        max-width: 220px;
+      }
+      .control-group > .custom-select-wrapper {
+        flex: 0 0 260px;
+        width: 260px;
+        min-width: 260px;
+        max-width: 260px;
+      }
+    }
 
     input[type="text"], input[type="number"], input[type="file"] {
       padding: 8px 12px; font-size: 14px; background-color: var(--input-bg);
@@ -175,7 +225,7 @@
     .form-group { display: flex; flex-direction: column; gap: 6px; }
     label { font-size: 12px; color: var(--muted-text); font-weight: bold; }
 
-    .custom-select-wrapper { position: relative; user-select: none; width: 100%; max-width: 100%; box-sizing: border-box; }
+    .custom-select-wrapper { position: relative; user-select: none; width: 100%; max-width: 100%; min-width: 0; flex: 1 1 auto; box-sizing: border-box; }
     .custom-select-trigger {
       display: flex; justify-content: space-between; align-items: center; padding: 8px 16px;
       background-color: var(--input-bg); color: var(--input-text); border: 1px solid var(--border-color);
@@ -201,21 +251,100 @@
     .custom-select-option:last-child { border-radius: 0 0 16px 16px; }
 
     @media (max-width: 600px) {
-      body { padding: 8px; } .container { padding: 12px; }
-      .header-area { flex-direction: column; align-items: flex-start; gap: 8px; }
-      
-      .control-group { flex-direction: column; align-items: stretch; }
-      .control-group > * { width: 100%; margin-bottom: 4px; }
-      
-      .editor-form { grid-template-columns: 1fr; } .form-group-full { grid-column: span 1; }
-      
-      .tab-container { flex-direction: column; align-items: stretch; border-bottom: none; }
-      .tab-left { border-bottom: 2px solid var(--border-color); padding-bottom: 5px; flex-wrap: nowrap; }
-      .tab-btn { flex: 1; text-align: center; border-radius: 8px 8px 0 0; }
-      .tab-right-actions { flex-direction: column; align-items: stretch; gap: 8px; padding-top: 8px; }
-      .tab-right-actions button, .tab-right-actions input, .tab-right-actions .custom-select-wrapper { width: 100%; margin-bottom: 0; }
-      
-      .player-controls button { min-height: 40px; }
+      html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
+      body { padding: 8px; box-sizing: border-box; }
+      .container { width: 100%; max-width: 100%; padding: 12px; box-sizing: border-box; }
+      .header-area { flex-direction: column; align-items: stretch; gap: 8px; }
+      .header-area h2 { overflow-wrap: anywhere; }
+      .header-area #themeToggleBtn { width: 100%; }
+
+      /* スマホでは上部の主要操作を完全な縦並びにする */
+      .control-group {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        margin-bottom: 12px;
+        width: 100%;
+      }
+      .control-group > * {
+        flex: 0 0 100% !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        margin: 0;
+        box-sizing: border-box;
+      }
+      .control-group > input[type="file"],
+      .control-group > button,
+      .control-group > .custom-select-wrapper,
+      .control-group .custom-select-trigger,
+      .control-group .custom-select-options {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        box-sizing: border-box;
+      }
+      .control-group > .custom-select-wrapper {
+        flex: 0 0 100% !important;
+      }
+
+      .layout-grid { width: 100%; min-width: 0; }
+      .preview-section, .editor-section { min-width: 0; }
+      canvas { max-width: 100%; height: auto; }
+
+      .editor-form { grid-template-columns: 1fr; }
+      .form-group-full { grid-column: span 1; }
+
+      .tab-container {
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+        min-width: 0;
+        border-bottom: none;
+      }
+      .tab-left {
+        width: 100%;
+        min-width: 0;
+        border-bottom: 2px solid var(--border-color);
+        padding-bottom: 5px;
+        flex-wrap: nowrap;
+      }
+      .tab-btn {
+        flex: 1 1 0;
+        min-width: 0;
+        text-align: center;
+        border-radius: 8px 8px 0 0;
+      }
+      .tab-right-actions {
+        width: 100%;
+        min-width: 0;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        padding-top: 8px;
+      }
+      .tab-right-actions > * {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+      }
+      .tab-right-actions .custom-select-wrapper {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+      }
+
+      .player-controls { min-width: 0; }
+      .button-row { width: 100%; }
+      .player-controls button {
+        min-height: 40px;
+        min-width: 0;
+        padding: 10px 8px;
+        white-space: nowrap;
+      }
+      #timeDisplay { min-width: 68px; }
       button { padding: 10px 16px; }
     }
   </style>
@@ -224,7 +353,7 @@
 
 <div class="container">
   <div class="header-area">
-    <h2>TextVideoEditer Ver.2.0</h2>
+    <h2>TextVideoEditer Ver.2.1</h2>
     <button id="themeToggleBtn" class="btn-gray"> ☀ / ☽切替 </button>
   </div>
 
