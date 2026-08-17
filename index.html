@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TextVideoEditer Ver.2.1</title>
+  <title>TextVideoEditer Ver.2.2</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@700;900&family=Zen+KakuGothic+New:wght@700;900&family=Zen+Old+Mincho:wght@700;900&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -353,7 +353,7 @@
 
 <div class="container">
   <div class="header-area">
-    <h2>TextVideoEditer Ver.2.1</h2>
+    <h2>TextVideoEditer Ver.2.2</h2>
     <button id="themeToggleBtn" class="btn-gray"> ☀ / ☽切替 </button>
   </div>
 
@@ -933,7 +933,7 @@
       sourceVideo.load();
       sourceVideo.onloadedmetadata = () => {
         enableControls(); updateCanvasDimensions();
-        seekBar.max = sourceVideo.duration; seekBar.value = 0;
+        syncSeekBarToVideoDuration();
         updateTimeDisplay();
         statusText.textContent = `動画ロード完了 (長さ: ${sourceVideo.duration.toFixed(1)}秒)`;
         drawPreviewAtTime(0);
@@ -1484,7 +1484,33 @@
     });
   }
 
-  function updateTimeDisplay() { timeDisplay.textContent = `${sourceVideo.currentTime.toFixed(1)} / ${sourceVideo.duration.toFixed(1)}`; seekBar.value = sourceVideo.currentTime; }
+  // 動画の実時間を基準にしたシークバー管理。
+  // range要素自体の固定的な上限には依存せず、実際の動画長へ常に追従させる。
+  const SEEKBAR_RANGE_MAX = 1000000;
+
+  function getVideoDuration() {
+    const d = Number(sourceVideo.duration);
+    return Number.isFinite(d) && d > 0 ? d : 0;
+  }
+
+  function syncSeekBarToVideoDuration() {
+    const duration = getVideoDuration();
+    if (!duration) return;
+    // シークバー内部は0〜1000000の割合で管理し、
+    // 240秒など特定の秒数を上限として扱わない。
+    seekBar.min = 0;
+    seekBar.max = SEEKBAR_RANGE_MAX;
+    const current = Math.max(0, Math.min(sourceVideo.currentTime || 0, duration));
+    seekBar.value = String((current / duration) * SEEKBAR_RANGE_MAX);
+  }
+
+  function updateTimeDisplay() {
+    const current = Number.isFinite(sourceVideo.currentTime) ? Math.max(0, sourceVideo.currentTime) : 0;
+    const duration = getVideoDuration();
+    timeDisplay.textContent = `${current.toFixed(1)} / ${duration > 0 ? duration.toFixed(1) : '0.0'}`;
+    if (duration > 0) syncSeekBarToVideoDuration();
+  }
+
   function videoTrainedDraw() {
     drawVideoToCanvas(ctx, canvas);
   }
@@ -1507,10 +1533,32 @@
     cancelAnimationFrame(previewAnimationFrame); stopAllActiveAudioSources(); drawPreviewAtTime(0);
   });
 
-  function skipTime(offset) { if (!sourceVideo.src) return; drawPreviewAtTime(Math.max(0, Math.min(sourceVideo.currentTime + offset, sourceVideo.duration))); }
-  btnRewind.addEventListener('click', () => skipTime(-5)); btnForward.addEventListener('click', () => skipTime(5));
-  btnStart.addEventListener('click', () => drawPreviewAtTime(0)); btnEnd.addEventListener('click', () => drawPreviewAtTime(sourceVideo.duration - 0.1));
-  seekBar.addEventListener('input', (e) => { if (!sourceVideo.src) return; drawPreviewAtTime(parseFloat(e.target.value)); });
+  function skipTime(offset) {
+    if (!sourceVideo.src) return;
+    const duration = getVideoDuration();
+    const base = Number.isFinite(sourceVideo.currentTime) ? sourceVideo.currentTime : 0;
+    drawPreviewAtTime(Math.max(0, Math.min(base + offset, duration || base + offset)));
+  }
+  btnRewind.addEventListener('click', () => skipTime(-5));
+  btnForward.addEventListener('click', () => skipTime(5));
+  btnStart.addEventListener('click', () => drawPreviewAtTime(0));
+  btnEnd.addEventListener('click', () => {
+    const duration = getVideoDuration();
+    drawPreviewAtTime(Math.max(0, duration - 0.1));
+  });
+  seekBar.addEventListener('input', (e) => {
+    if (!sourceVideo.src) return;
+    const duration = getVideoDuration();
+    if (!duration) return;
+    const ratio = Math.max(0, Math.min(1, Number(e.target.value) / SEEKBAR_RANGE_MAX));
+    drawPreviewAtTime(ratio * duration);
+  });
+
+  // メディア側でdurationが更新された場合も、即座にシークバーへ反映する。
+  sourceVideo.addEventListener('durationchange', () => {
+    syncSeekBarToVideoDuration();
+    updateTimeDisplay();
+  });
 
   function drawPreviewAtTime(timeSec) {
     if (!sourceVideo.src) return;
