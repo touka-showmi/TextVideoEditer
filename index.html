@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TextVideoEditer Ver.2.2</title>
+  <title>TextVideoEditer_Ver2.2.1</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@700;900&family=Zen+KakuGothic+New:wght@700;900&family=Zen+Old+Mincho:wght@700;900&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -353,7 +353,7 @@
 
 <div class="container">
   <div class="header-area">
-    <h2>TextVideoEditer Ver.2.2</h2>
+    <h2>TextVideoEditer_Ver2.2.1</h2>
     <button id="themeToggleBtn" class="btn-gray"> ☀ / ☽切替 </button>
   </div>
 
@@ -791,9 +791,39 @@
 
   let sourceVideo = document.createElement('video');
   sourceVideo.playsInline = true;
+  sourceVideo.setAttribute('playsinline', '');
+  sourceVideo.setAttribute('webkit-playsinline', '');
+  outputVideo.playsInline = true;
+  outputVideo.setAttribute('playsinline', '');
+  outputVideo.setAttribute('webkit-playsinline', '');
+
+  // iPhone / iPadOS Safari 判定。iPadOS は MacIntel と報告する場合があるため touch points も確認。
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
   let isPreviewPlaying = false;
   let previewAnimationFrame;
   let mediaElementSourceNode = null;
+
+  // Safari/iOSでCanvasへフォントを反映させるための軽量なロード確認。
+  async function ensureFontLoaded(fontFamily) {
+    if (!isIOS) return true;
+    const family = String(fontFamily || '').trim();
+    if (!family || !document.fonts) return true;
+    const escaped = family.replace(/\"/g, '\\"');
+    try {
+      if (document.fonts.load) {
+        await Promise.race([
+          document.fonts.load(`700 40px "${escaped}"`),
+          new Promise(resolve => setTimeout(resolve, isIOS ? 3000 : 1500))
+        ]);
+      }
+      if (document.fonts.check) return document.fonts.check(`700 40px "${escaped}"`);
+    } catch (e) {
+      console.warn('フォント確認を継続します:', family, e);
+    }
+    return true;
+  }
 
   // ★ カスタムフォント読み込み処理
   customFontInput.addEventListener('change', async (e) => {
@@ -1579,47 +1609,165 @@
 
   function drawSingleTelop(ctx, canvas, t, currentVideoTime, nowMs) {
     currentVideoTime = Number.isFinite(currentVideoTime) ? Math.max(0, currentVideoTime) : 0;
-    if (!isTelopActiveAtTime(t, currentVideoTime)) return;
-    const timeSinceStart = currentVideoTime - t.startTime;
-    let alpha = 1.0, scaleX = 1.0, scaleY = 1.0, offsetX = 0, offsetY = 0, rotation = 0;
+    const startTime = Math.max(0, Number(t.startTime) || 0);
+    const endTime = Math.max(startTime, Number(t.endTime) || startTime);
+    if (currentVideoTime < startTime || currentVideoTime > endTime) return;
 
-    if (timeSinceStart < t.inAnimDuration && t.inAnimType !== 'none') {
-      const progress = Math.min(timeSinceStart / t.inAnimDuration, 1.0); const easeP = easeOutCubic(progress);
+    // 表示開始からの経過時間。出現アニメーションとループアニメーションは
+    // 同じフレーム内で独立して計算し、どちらも表示開始時点から動作させる。
+    const timeSinceStart = Math.max(0, currentVideoTime - startTime);
+
+    // -----------------------------
+    // 1. 出現アニメーション（旧版と同じ式）
+    // -----------------------------
+    let inAlpha = 1.0;
+    let inScaleX = 1.0;
+    let inScaleY = 1.0;
+    let inOffsetX = 0;
+    let inOffsetY = 0;
+
+    const inDuration = Math.max(0, Number(t.inAnimDuration) || 0);
+    if (inDuration > 0 && t.inAnimType !== 'none' && timeSinceStart < inDuration) {
+      const progress = Math.min(timeSinceStart / inDuration, 1.0);
+      const easeP = easeOutCubic(progress);
+
       switch (t.inAnimType) {
-        case 'fade': alpha *= easeP; break;
-        case 'pop': scaleX *= (0.2 + easeP * 0.8); scaleY *= (0.2 + easeP * 0.8); alpha *= Math.min(progress * 2, 1.0); break;
-        case 'slideUp': offsetY += (1.0 - easeP) * 60; alpha *= easeP; break;
-        case 'bounce': offsetY -= (1.0 - easeOutBounce(progress)) * 90; alpha *= Math.min(progress * 3, 1.0); break;
-        case 'drop': offsetY -= (1.0 - easeP) * 150; scaleY *= (1.0 + (1.0 - easeP) * 0.5); alpha *= easeP; break;
+        case 'fade':
+          inAlpha *= easeP;
+          break;
+        case 'pop':
+          inScaleX *= (0.2 + easeP * 0.8);
+          inScaleY *= (0.2 + easeP * 0.8);
+          inAlpha *= Math.min(progress * 2, 1.0);
+          break;
+        case 'slideUp':
+          inOffsetY += (1.0 - easeP) * 60;
+          inAlpha *= easeP;
+          break;
+        case 'bounce':
+          inOffsetY -= (1.0 - easeOutBounce(progress)) * 90;
+          inAlpha *= Math.min(progress * 3, 1.0);
+          break;
+        case 'drop':
+          inOffsetY -= (1.0 - easeP) * 150;
+          inScaleY *= (1.0 + (1.0 - easeP) * 0.5);
+          inAlpha *= easeP;
+          break;
       }
     }
+
+    // -----------------------------
+    // 2. ループアニメーション（旧版の式を完全維持）
+    //    出現アニメーション終了を待たない。
+    // -----------------------------
+    let loopOffsetX = 0;
+    let loopOffsetY = 0;
+    let loopScaleX = 1.0;
+    let loopScaleY = 1.0;
+    let loopRotation = 0;
+    let loopAlpha = 1.0;
+
+    const loopTime = (Number.isFinite(nowMs) ? nowMs : performance.now()) / 1000
+      * (Number.isFinite(Number(t.loopSpeed)) ? Number(t.loopSpeed) : 1.0);
+    const intensity = Number.isFinite(Number(t.loopIntensity)) ? Number(t.loopIntensity) : 1.0;
+
+    if (t.loopAnimType !== 'none' && intensity > 0) {
+      switch (t.loopAnimType) {
+        case 'subtleShake':
+          loopOffsetX += (
+            Math.sin(loopTime * 15) * 1.5 + (Math.random() - 0.5) * 1.2
+          ) * intensity;
+          loopOffsetY += (
+            Math.cos(loopTime * 18) * 1.5 + (Math.random() - 0.5) * 1.2
+          ) * intensity;
+          loopRotation += Math.sin(loopTime * 10) * 0.015 * intensity;
+          break;
+
+        case 'hardShake':
+          loopOffsetX += ((Math.random() - 0.5) * 8) * intensity;
+          loopOffsetY += ((Math.random() - 0.5) * 8) * intensity;
+          loopRotation += ((Math.random() - 0.5) * 0.08) * intensity;
+          break;
+
+        case 'glitch':
+          if (Math.random() < 0.12 * intensity) {
+            loopOffsetX += (Math.random() - 0.5) * 20 * intensity;
+            loopAlpha *= 0.6 + Math.random() * 0.4;
+          }
+          break;
+
+        case 'float':
+          loopOffsetY += Math.sin(loopTime * 2.5) * 8 * intensity;
+          loopRotation += Math.cos(loopTime * 1.8) * 0.02 * intensity;
+          break;
+
+        case 'pulse': {
+          const pulseFactor = 1.0 + (Math.sin(loopTime * 4) * 0.05) * intensity;
+          loopScaleX *= pulseFactor;
+          loopScaleY *= pulseFactor;
+          break;
+        }
+      }
+    }
+
+    // -----------------------------
+    // 3. 同一フレームで合成
+    // -----------------------------
+    const offsetX = inOffsetX + loopOffsetX;
+    const offsetY = inOffsetY + loopOffsetY;
+    const scaleX = inScaleX * loopScaleX;
+    const scaleY = inScaleY * loopScaleY;
+    const alpha = inAlpha * loopAlpha;
 
     const canvasX = (canvas.width / 2) + ((t.x + offsetX) * (canvas.width / 480));
     const canvasY = (canvas.height / 2) - ((t.y + offsetY) * (canvas.height / 360));
 
-    // slope は度数法。Canvasのrotate()はラジアンなので変換する。
     const textRotationDeg = Number.isFinite(Number(t.rotation)) ? Number(t.rotation) : 0;
-    rotation += textRotationDeg * Math.PI / 180;
+    const rotation = (textRotationDeg * Math.PI / 180) + loopRotation;
 
-    ctx.save(); ctx.translate(canvasX, canvasY); ctx.rotate(rotation); ctx.scale(scaleX, scaleY);
+    ctx.save();
+    ctx.translate(canvasX, canvasY);
+    ctx.rotate(rotation);
+    ctx.scale(scaleX, scaleY);
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
 
     const scaleFactor = canvas.width / 480;
     ctx.font = `700 ${t.fontSize * scaleFactor}px "${t.fontFamily}", sans-serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
 
-    if (t.shadowBlur > 0) { ctx.shadowColor = t.shadowColor; ctx.shadowBlur = t.shadowBlur * scaleFactor; ctx.shadowOffsetX = t.shadowOffsetX * scaleFactor; ctx.shadowOffsetY = t.shadowOffsetY * scaleFactor; }
-    if (t.strokeWidth > 0) { ctx.strokeStyle = t.strokeColor; ctx.lineWidth = t.strokeWidth * 2 * scaleFactor; ctx.lineJoin = 'round'; ctx.strokeText(t.text, 0, 0); }
+    if (t.shadowBlur > 0) {
+      ctx.shadowColor = t.shadowColor;
+      ctx.shadowBlur = t.shadowBlur * scaleFactor;
+      ctx.shadowOffsetX = t.shadowOffsetX * scaleFactor;
+      ctx.shadowOffsetY = t.shadowOffsetY * scaleFactor;
+    }
+    if (t.strokeWidth > 0) {
+      ctx.strokeStyle = t.strokeColor;
+      ctx.lineWidth = t.strokeWidth * 2 * scaleFactor;
+      ctx.lineJoin = 'round';
+      ctx.strokeText(t.text, 0, 0);
+    }
 
     ctx.shadowColor = 'transparent';
     if (t.useGradient) {
-      const tw = ctx.measureText(t.text).width || 100, th = t.fontSize * scaleFactor;
+      const tw = ctx.measureText(t.text).width || 100;
+      const th = t.fontSize * scaleFactor;
       const rad = t.gradAngle * (Math.PI / 180);
-      const gradient = ctx.createLinearGradient(-Math.cos(rad)*(tw/2), -Math.sin(rad)*(th/2), Math.cos(rad)*(tw/2), Math.sin(rad)*(th/2));
-      gradient.addColorStop(0, t.gradColor1); gradient.addColorStop(1, t.gradColor2);
+      const gradient = ctx.createLinearGradient(
+        -Math.cos(rad) * (tw / 2),
+        -Math.sin(rad) * (th / 2),
+        Math.cos(rad) * (tw / 2),
+        Math.sin(rad) * (th / 2)
+      );
+      gradient.addColorStop(0, t.gradColor1);
+      gradient.addColorStop(1, t.gradColor2);
       ctx.fillStyle = gradient;
-    } else { ctx.fillStyle = t.fillColor; }
-    ctx.fillText(t.text, 0, 0); ctx.restore();
+    } else {
+      ctx.fillStyle = t.fillColor;
+    }
+    ctx.fillText(t.text, 0, 0);
+    ctx.restore();
   }
 
   // エンコード処理
@@ -1631,6 +1779,23 @@
     if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) {
       alert('このブラウザは対応していません。');
       return;
+    }
+
+    // iOS Safariではユーザー操作から時間が空いた後のplay()/resume()が拒否される場合があるため、
+    // 書き出しボタンの同期処理直下で再生許可を先に確保する。
+    let iosPrimedPlay = null;
+    if (isIOS) {
+      try {
+        const primeCtx = getAudioContext();
+        primeCtx.resume().catch(() => {});
+      } catch (e) {
+        console.warn('iOS AudioContext 初期化を継続します:', e);
+      }
+      try {
+        iosPrimedPlay = sourceVideo.play().catch(() => null);
+      } catch (e) {
+        iosPrimedPlay = null;
+      }
     }
 
     if (isPreviewPlaying) btnPlayPause.click();
@@ -1660,8 +1825,19 @@
     const yieldToBrowser = () => new Promise(resolve => requestAnimationFrame(() => resolve()));
 
     try {
-      setExportStage('準備中', 'プレビューCanvasとは別の高解像度Canvasを作成');
-      await document.fonts.ready;
+      setExportStage('準備中', isIOS ? 'iOS/Safari互換モード' : '標準互換モード');
+      if (isIOS) {
+        try {
+          await Promise.race([
+            document.fonts?.ready || Promise.resolve(),
+            new Promise(resolve => setTimeout(resolve, 3000))
+          ]);
+        } catch (e) {
+          console.warn('iOSでdocument.fonts.readyを待機できませんでした。描画を継続します。', e);
+        }
+      } else {
+        await document.fonts.ready;
+      }
 
       const exportDimensions = getExportCanvasDimensions();
       ensureExportCanvas();
@@ -1694,19 +1870,31 @@
 
       const combinedStream = new MediaStream([...videoTracks, ...audioTracks]);
 
-      // 高画質優先。VP9を先に試し、利用できない環境ではVP8等へフォールバック。
-      const mimeCandidates = [
-        'video/webm;codecs=vp9,opus',
-        'video/webm;codecs=vp8,opus',
-        'video/webm',
-        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-        'video/mp4'
-      ];
+      // iOSだけMP4(H.264/AAC)を優先。それ以外は従来どおりWebMを優先。
+      const mimeCandidates = isIOS
+        ? [
+            'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+            'video/mp4',
+            'video/webm;codecs=vp9,opus',
+            'video/webm;codecs=vp8,opus',
+            'video/webm'
+          ]
+        : [
+            'video/webm;codecs=vp9,opus',
+            'video/webm;codecs=vp8,opus',
+            'video/webm',
+            'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+            'video/mp4'
+          ];
       const supportedMimeTypes = mimeCandidates.filter(c => {
         try { return MediaRecorder.isTypeSupported(c); } catch (e) { return false; }
       });
       mimeType = supportedMimeTypes[0] || '';
-      if (!mimeType) throw new Error('対応形式なし');
+      if (!mimeType) {
+        throw new Error(isIOS
+          ? 'iOS/Safariで利用可能な録画形式がありません。Safariを最新版に更新してください。'
+          : '対応形式なし');
+      }
 
       setExportStage(
         'MediaRecorder生成中',
@@ -1761,6 +1949,9 @@
         sourceVideo.addEventListener('error', reject, { once: true });
       });
 
+      for (const telop of telopList) {
+        await ensureFontLoaded(telop.fontFamily);
+      }
       renderExportFrame(0, performance.now());
       await yieldToBrowser();
 
@@ -1786,7 +1977,26 @@
         exportAudioSourceNodes.push(srcNode);
       });
 
-      await sourceVideo.play();
+      if (isIOS && iosPrimedPlay) {
+        try { await iosPrimedPlay; } catch (e) {}
+      }
+      try {
+        await sourceVideo.play();
+      } catch (playErr) {
+        if (isIOS) {
+          const wasMuted = sourceVideo.muted;
+          try {
+            sourceVideo.muted = true;
+            await sourceVideo.play();
+            sourceVideo.muted = wasMuted;
+          } catch (retryErr) {
+            sourceVideo.muted = wasMuted;
+            throw playErr;
+          }
+        } else {
+          throw playErr;
+        }
+      }
       await yieldToBrowser();
       await new Promise(requestAnimationFrame);
 
@@ -1858,15 +2068,55 @@
       outputVideo.load();
 
       const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
-      const downloadLink = document.createElement('a');
-      downloadLink.href = videoURL;
-      downloadLink.download = `mixed_video_${exportDimensions.width}x${exportDimensions.height}.${extension}`;
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      downloadLink.remove();
+      const fileName = `mixed_video_${exportDimensions.width}x${exportDimensions.height}.${extension}`;
 
-      statusText.textContent =
-        `書き出し完了！ (${mimeType}) — ${exportDimensions.width}×${exportDimensions.height} — ${(blob.size / (1024 * 1024)).toFixed(2)} MB`;
+      if (isIOS) {
+        // iOS Safariでは非同期処理後の download 属性クリックが無視される場合がある。
+        // 自動開始を試しつつ、確実に再操作できる保存リンクを画面に残す。
+        const downloadLink = document.createElement('a');
+        downloadLink.href = videoURL;
+        downloadLink.download = fileName;
+        downloadLink.textContent = `⬇ 動画を保存 (${fileName})`;
+        downloadLink.target = '_self';
+        downloadLink.rel = 'noopener';
+        downloadLink.style.display = 'inline-block';
+        downloadLink.style.marginTop = '10px';
+        downloadLink.style.padding = '10px 16px';
+        downloadLink.style.borderRadius = '20px';
+        downloadLink.style.background = '#0284c7';
+        downloadLink.style.color = '#fff';
+        downloadLink.style.fontWeight = 'bold';
+        downloadLink.style.textDecoration = 'none';
+        downloadLink.setAttribute('aria-label', `動画を保存: ${fileName}`);
+        document.body.appendChild(downloadLink);
+
+        try {
+          downloadLink.click();
+        } catch (downloadErr) {
+          console.warn('iOS自動ダウンロードを開始できませんでした。保存リンクを使用してください。', downloadErr);
+        }
+
+        // iOSではBlob URLをすぐに解放しない。
+        setTimeout(() => {
+          try { URL.revokeObjectURL(videoURL); } catch (e) {}
+          try { downloadLink.remove(); } catch (e) {}
+        }, 5 * 60 * 1000);
+
+        statusText.textContent =
+          `書き出し完了！ iOSでは自動保存されない場合があります。表示された「動画を保存」をタップしてください。 (${mimeType}) — ${exportDimensions.width}×${exportDimensions.height} — ${(blob.size / (1024 * 1024)).toFixed(2)} MB`;
+      } else {
+        // iOS以外は従来どおり、自動ダウンロードして一時リンクを即時破棄。
+        const downloadLink = document.createElement('a');
+        downloadLink.href = videoURL;
+        downloadLink.download = fileName;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        downloadLink.remove();
+        URL.revokeObjectURL(videoURL);
+
+        statusText.textContent =
+          `書き出し完了！ (${mimeType}) — ${exportDimensions.width}×${exportDimensions.height} — ${(blob.size / (1024 * 1024)).toFixed(2)} MB`;
+      }
     } catch (err) {
       console.error(err);
       alert(`書き出しに失敗しました：${err.message || err}`);
