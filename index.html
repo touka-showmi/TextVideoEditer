@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TextVideoEditer_Ver2.3</title>
+  <title>TextVideoEditer_Ver2.3+</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@700;900&family=Zen+KakuGothic+New:wght@700;900&family=Zen+Old+Mincho:wght@700;900&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -419,7 +419,7 @@
 <div class="container">
   <div class="header-area">
     <div class="header-left">
-      <h2>TextVideoEditer_Ver2.3</h2>
+      <h2>TextVideoEditer_Ver2.3+</h2>
       <div class="custom-title-group">
         <label for="customTitleInput">　編集ファイルをカスタマイズ：</label>
         <input type="text" id="customTitleInput" placeholder="入力するとタブ名に反映">
@@ -440,7 +440,7 @@
         <h3 id="customizeModalTitle">⚙ カスタマイズ</h3>
         <button id="customizeCloseBtn" class="btn-gray" type="button" aria-label="閉じる">✕ 閉じる</button>
       </div>
-      <p class="customize-modal-description">エディタ本体の編集・合成処理は変更せず、操作方法を設定します。設定はこのブラウザに保存され、次回も引き継がれます。</p>
+      <p class="customize-modal-description">字幕・音声の編集機能を維持しながら、操作方法と動画の書き出し方式を設定します。設定はこのブラウザに保存され、次回も引き継がれます。</p>
 
       <div class="customize-section">
         <h4>キーボードショートカット</h4>
@@ -495,6 +495,24 @@
           </div>
         </div>
         <p class="customize-help-text">「置き換える」は対象の既存データを入れ替えます。「追加する」は既存データを残します。MP3 / WAV の置き換えでは、以前の音源一覧と、それらを使っている効果音トラックもクリアしてから新しい音源を登録します。読み込みに成功した音源がない場合、既存データは保持されます。</p>
+      </div>
+
+      <div class="customize-section">
+        <h4>動画の書き出し方式</h4>
+        <div class="customize-options">
+          <div class="customize-option">
+            <label for="customizeBetaExportEnabled">Beta版（案B：WebCodecs / Worker）の設定を有効にする</label>
+            <input type="checkbox" id="customizeBetaExportEnabled">
+          </div>
+          <div class="customize-option customize-option-select">
+            <label for="customizeExportEngine">使用する書き出し方式</label>
+            <select id="customizeExportEngine" disabled>
+              <option value="standard">通常版（案A：バックグラウンド描画補助）</option>
+              <option value="beta">Beta版（案B：WebCodecs / Worker）</option>
+            </select>
+          </div>
+        </div>
+        <p class="customize-help-text">通常版は、表示中に requestAnimationFrame、バックグラウンドではタイマーを使う対策を行います。ただし、ブラウザによるタイマー制限や動画再生の一時停止は完全には防げません。Beta版の選択設定は保存・読み込みできますが、WebCodecs / Worker による新しい書き出しエンジンはまだ接続されていません。Beta版を選んで書き出す場合は、そのことを確認してから通常版へフォールバックします。</p>
       </div>
 
       <div class="customize-modal-footer" style="justify-content: flex-start;">
@@ -814,7 +832,7 @@ const customTitleInput = document.getElementById('customTitleInput');
 
 function updateBrowserTabTitle() {
   const customTitle = (customTitleInput?.value || '').trim();
-  document.title = customTitle ? `${customTitle} | TextVideoEditer` : 'TextVideoEditer';
+  document.title = customTitle ? `${customTitle} | TextVideoEditer_Ver2.3+` : 'TextVideoEditer_Ver2.3+';
 }
 
 if (customTitleInput) {
@@ -2124,6 +2142,8 @@ updateBrowserTabTitle();
     subtitleImportMode: 'replace',
     audioTrackImportMode: 'append',
     audioFilesImportMode: 'append',
+    betaExportEnabled: false,
+    exportMode: 'standard',
     shortcuts: {
       playPause: { code: 'Space', ctrl: false, alt: false, shift: false, meta: false },
       rewind: { code: 'ArrowLeft', ctrl: false, alt: false, shift: true, meta: false },
@@ -2155,7 +2175,9 @@ updateBrowserTabTitle();
   const customizeSubtitleImportMode = document.getElementById('customizeSubtitleImportMode');
   const customizeAudioTrackImportMode = document.getElementById('customizeAudioTrackImportMode');
   const customizeAudioFilesImportMode = document.getElementById('customizeAudioFilesImportMode');
-  const customizationModeControls = [customizeSubtitleImportMode, customizeAudioTrackImportMode, customizeAudioFilesImportMode];
+  const customizeBetaExportEnabled = document.getElementById('customizeBetaExportEnabled');
+  const customizeExportEngine = document.getElementById('customizeExportEngine');
+  const customizationModeControls = [customizeSubtitleImportMode, customizeAudioTrackImportMode, customizeAudioFilesImportMode, customizeExportEngine];
 
   function cloneDefaultCustomization() {
     return JSON.parse(JSON.stringify(defaultCustomization));
@@ -2181,6 +2203,9 @@ updateBrowserTabTitle();
       if (saved.audioFilesImportMode === 'replace' || saved.audioFilesImportMode === 'append') {
         base.audioFilesImportMode = saved.audioFilesImportMode;
       }
+      if (typeof saved.betaExportEnabled === 'boolean') base.betaExportEnabled = saved.betaExportEnabled;
+      if (saved.exportMode === 'standard' || saved.exportMode === 'beta') base.exportMode = saved.exportMode;
+      if (!base.betaExportEnabled) base.exportMode = 'standard';
       if (saved.shortcuts && typeof saved.shortcuts === 'object') {
         Object.keys(base.shortcuts).forEach(id => {
           const value = saved.shortcuts[id];
@@ -2222,6 +2247,17 @@ updateBrowserTabTitle();
     btnForward.title = `${customization.seekSeconds}秒進む`;
   }
 
+  function updateExportEngineControlState() {
+    const enabled = customizeBetaExportEnabled.checked;
+    customizeExportEngine.disabled = !enabled;
+    const wrapper = customizeExportEngine.nextElementSibling;
+    if (wrapper && wrapper.classList.contains('custom-select-wrapper')) {
+      wrapper.style.opacity = enabled ? '1' : '0.55';
+      wrapper.style.pointerEvents = enabled ? '' : 'none';
+      wrapper.setAttribute('aria-disabled', String(!enabled));
+    }
+  }
+
   function renderCustomizationControls() {
     customizeShortcutsEnabled.checked = customizationDraft.shortcutsEnabled;
     customizeIgnoreEditable.checked = customizationDraft.ignoreEditable;
@@ -2231,6 +2267,9 @@ updateBrowserTabTitle();
     customizeSubtitleImportMode.value = customizationDraft.subtitleImportMode;
     customizeAudioTrackImportMode.value = customizationDraft.audioTrackImportMode;
     customizeAudioFilesImportMode.value = customizationDraft.audioFilesImportMode;
+    customizeBetaExportEnabled.checked = customizationDraft.betaExportEnabled;
+    customizeExportEngine.value = customizationDraft.betaExportEnabled ? customizationDraft.exportMode : 'standard';
+    updateExportEngineControlState();
     customizationModeControls.forEach(updateCustomSelectDisplay);
     shortcutButtons.forEach(button => {
       const shortcut = customizationDraft.shortcuts[button.dataset.shortcut];
@@ -2255,6 +2294,8 @@ updateBrowserTabTitle();
     customizationDraft.subtitleImportMode = customizeSubtitleImportMode.value === 'append' ? 'append' : 'replace';
     customizationDraft.audioTrackImportMode = customizeAudioTrackImportMode.value === 'replace' ? 'replace' : 'append';
     customizationDraft.audioFilesImportMode = customizeAudioFilesImportMode.value === 'replace' ? 'replace' : 'append';
+    customizationDraft.betaExportEnabled = customizeBetaExportEnabled.checked;
+    customizationDraft.exportMode = customizeBetaExportEnabled.checked && customizeExportEngine.value === 'beta' ? 'beta' : 'standard';
     customizationDraft.seekSeconds = seconds;
     return JSON.parse(JSON.stringify(customizationDraft));
   }
@@ -2317,6 +2358,16 @@ updateBrowserTabTitle();
       if (!allowed.includes(raw[key])) throw new Error(`設定「${key}」の値が正しくありません。`);
       result[key] = raw[key];
     });
+
+    // 旧バージョンのJSONには書き出し方式の項目がないため、未指定時は通常版にする。
+    if (raw.betaExportEnabled !== undefined && typeof raw.betaExportEnabled !== 'boolean') {
+      throw new Error('設定「betaExportEnabled」は true / false で指定してください。');
+    }
+    result.betaExportEnabled = raw.betaExportEnabled === true;
+    if (raw.exportMode !== undefined && !['standard', 'beta'].includes(raw.exportMode)) {
+      throw new Error('設定「exportMode」の値が正しくありません。');
+    }
+    result.exportMode = result.betaExportEnabled && raw.exportMode === 'beta' ? 'beta' : 'standard';
 
     if (!raw.shortcuts || typeof raw.shortcuts !== 'object' || Array.isArray(raw.shortcuts)) {
       throw new Error('ショートカット設定が見つからないか、形式が正しくありません。');
@@ -2515,8 +2566,16 @@ updateBrowserTabTitle();
     renderCustomizationControls();
     customizeSaveStatus.textContent = '初期設定を表示中です。「設定を保存」を押すと保存されます。';
   });
-  [customizeShortcutsEnabled, customizeIgnoreEditable, customizeIgnoreRepeat, customizeSeekSeconds, customizeSubtitleClickSeeks, ...customizationModeControls].forEach(control => {
+  [customizeShortcutsEnabled, customizeIgnoreEditable, customizeIgnoreRepeat, customizeSeekSeconds, customizeSubtitleClickSeeks, customizeBetaExportEnabled, ...customizationModeControls].forEach(control => {
     control.addEventListener('change', () => { customizeSaveStatus.textContent = '未保存の変更があります。'; });
+  });
+  customizeBetaExportEnabled.addEventListener('change', () => {
+    if (!customizeBetaExportEnabled.checked) {
+      customizeExportEngine.value = 'standard';
+      updateCustomSelectDisplay(customizeExportEngine);
+    }
+    updateExportEngineControlState();
+    customizeSaveStatus.textContent = '未保存の変更があります。';
   });
   renderCustomizationControls();
   updateSeekActionLabels();
@@ -2752,7 +2811,7 @@ updateBrowserTabTitle();
     ctx.restore();
   }
 
-  // エンコード処理
+  // エンコード処理。案Bのエンジンが接続されるまでは、Beta選択時に確認して案Aへフォールバックする。
   exportBtn.addEventListener('click', async () => {
     if (!sourceVideo.src || !Number.isFinite(sourceVideo.duration) || sourceVideo.duration <= 0) {
       alert('先に動画ファイルを読み込んでください。');
@@ -2761,6 +2820,13 @@ updateBrowserTabTitle();
     if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) {
       alert('このブラウザは対応していません。');
       return;
+    }
+    if (customization.betaExportEnabled && customization.exportMode === 'beta') {
+      const useStandardFallback = confirm(
+        'Beta版（案B：WebCodecs / Worker）が選択されていますが、Beta版エンジンはまだ接続されていません。\n\n' +
+        '今回は通常版（案A：バックグラウンド描画補助）で書き出しますか？'
+      );
+      if (!useStandardFallback) return;
     }
 
     // iOS Safariではユーザー操作から時間が空いた後のplay()/resume()が拒否される場合があるため、
@@ -2794,7 +2860,28 @@ updateBrowserTabTitle();
     let mimeType = '';
     let stoppedByVideoEnd = false;
     let exportProgressTimer = null;
+    let exportRenderRafId = null;
+    let exportRenderTimerId = null;
+    let exportVisibilityHandler = null;
+    let exportEndedHandler = null;
+    let pausedForBackground = false;
+    let exportResumeInProgress = false;
+    let exportFatalError = null;
     let exportStage = '準備中';
+    const exportControls = [btnStart, btnRewind, btnPlayPause, btnStop, btnForward, btnEnd, seekBar, videoInput, aspectRatioSelect];
+    const exportControlDisabledState = exportControls.map(control => control.disabled);
+    exportControls.forEach(control => { control.disabled = true; });
+    const exportCustomSelectWrappers = [aspectRatioSelect.nextElementSibling]
+      .filter(element => element && element.classList.contains('custom-select-wrapper'));
+    const exportCustomSelectStyles = exportCustomSelectWrappers.map(wrapper => ({
+      wrapper,
+      pointerEvents: wrapper.style.pointerEvents,
+      opacity: wrapper.style.opacity
+    }));
+    exportCustomSelectWrappers.forEach(wrapper => {
+      wrapper.style.pointerEvents = 'none';
+      wrapper.style.opacity = '0.55';
+    });
     let dataChunkCount = 0;
     let totalRecordedBytes = 0;
 
@@ -2804,10 +2891,25 @@ updateBrowserTabTitle();
       statusText.textContent = `エンコード: ${stage}${suffix}`;
       exportBtn.textContent = `合成エンコード中... ${stage}`;
     };
-    const yieldToBrowser = () => new Promise(resolve => requestAnimationFrame(() => resolve()));
+    // requestAnimationFrameだけを待つと、バックグラウンドタブで解決しない場合がある。
+    // タイマーとの競争にして、どちらかが発火した時点で続行する。
+    const yieldToBrowser = () => new Promise(resolve => {
+      let settled = false;
+      let fallbackTimer = null;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        if (fallbackTimer !== null) clearTimeout(fallbackTimer);
+        resolve();
+      };
+      fallbackTimer = setTimeout(finish, 80);
+      if (typeof requestAnimationFrame === 'function' && document.visibilityState === 'visible') {
+        requestAnimationFrame(finish);
+      }
+    });
 
     try {
-      setExportStage('準備中', isIOS ? 'iOS/Safari互換モード' : '標準互換モード');
+      setExportStage('案A：バックグラウンド描画補助を準備中', isIOS ? 'iOS/Safari互換モード' : '標準互換モード');
       if (isIOS) {
         try {
           await Promise.race([
@@ -2984,29 +3086,81 @@ updateBrowserTabTitle();
         }
       }
       await yieldToBrowser();
-      await new Promise(requestAnimationFrame);
 
       const exportProgressStart = performance.now();
+
+      const cancelScheduledExportRender = () => {
+        if (exportRenderRafId !== null) {
+          cancelAnimationFrame(exportRenderRafId);
+          exportRenderRafId = null;
+        }
+        if (exportRenderTimerId !== null) {
+          clearTimeout(exportRenderTimerId);
+          exportRenderTimerId = null;
+        }
+      };
 
       const stopRecorder = () => {
         if (stoppedByVideoEnd) return;
         stoppedByVideoEnd = true;
+        cancelScheduledExportRender();
         if (mediaRecorder && mediaRecorder.state !== 'inactive') {
           try { mediaRecorder.requestData(); } catch (e) {}
-          mediaRecorder.stop();
+          try { mediaRecorder.stop(); } catch (e) {}
         }
       };
 
-      sourceVideo.addEventListener('ended', stopRecorder, { once: true });
+      const pauseExportForBackground = () => {
+        if (pausedForBackground || stoppedByVideoEnd) return;
+        pausedForBackground = true;
+        try {
+          if (mediaRecorder && mediaRecorder.state === 'recording' && typeof mediaRecorder.pause === 'function') {
+            mediaRecorder.pause();
+          }
+        } catch (pauseError) {
+          console.warn('バックグラウンド一時停止を適用できませんでした:', pauseError);
+        }
+        try {
+          const suspendResult = actx.suspend();
+          if (suspendResult && typeof suspendResult.catch === 'function') suspendResult.catch(() => {});
+        } catch (audioSuspendError) {
+          console.warn('バックグラウンドで音声時計を一時停止できませんでした:', audioSuspendError);
+        }
+      };
+
+      const resumeExportFromBackground = async () => {
+        if (exportResumeInProgress || stoppedByVideoEnd) return;
+        exportResumeInProgress = true;
+        try {
+          await actx.resume();
+          if (mediaRecorder && mediaRecorder.state === 'paused' && typeof mediaRecorder.resume === 'function') {
+            mediaRecorder.resume();
+          }
+          if (!sourceVideo.ended && sourceVideo.paused) await sourceVideo.play();
+          pausedForBackground = false;
+        } catch (resumeError) {
+          exportFatalError = new Error(`バックグラウンドからの書き出し再開に失敗しました: ${resumeError.message || resumeError}`);
+          statusText.textContent = exportFatalError.message;
+          console.error('書き出し再開エラー:', resumeError);
+          stopRecorder();
+        } finally {
+          exportResumeInProgress = false;
+          scheduleExportRender();
+        }
+      };
+
+      exportEndedHandler = stopRecorder;
+      sourceVideo.addEventListener('ended', exportEndedHandler, { once: true });
 
       function updateExportProgress(timelineTime, forceComplete = false) {
         const dur = Number(sourceVideo.duration);
         if (!(dur > 0)) return;
 
         const elapsed = Math.max(0, (performance.now() - exportProgressStart) / 1000);
+        const pausedTimeline = sourceVideo.paused || pausedForBackground || exportResumeInProgress;
         const safeTime = forceComplete
           ? dur
-          : Math.min(dur, Math.max(timelineTime, elapsed));
+          : Math.min(dur, Math.max(timelineTime, pausedTimeline ? timelineTime : elapsed));
 
         const progress = Math.max(
           0,
@@ -3014,34 +3168,82 @@ updateBrowserTabTitle();
         );
 
         exportBtn.textContent = `合成エンコード中... ${progress.toFixed(1)}%`;
+        const backgroundNotice = document.visibilityState === 'hidden'
+          ? '（バックグラウンド中：ブラウザの制限によりフレーム落ちする場合があります）'
+          : '';
         statusText.textContent =
-          `高画質書き出し中... ${progress.toFixed(1)}% / ${exportDimensions.width}×${exportDimensions.height}`;
+          `高画質書き出し中... ${progress.toFixed(1)}% / ${exportDimensions.width}×${exportDimensions.height}${backgroundNotice}`;
       }
 
       exportProgressTimer = setInterval(() => {
         if (!stoppedByVideoEnd) updateExportProgress(getTimelineTime());
       }, 100);
 
-      function renderLoop() {
-        if (stoppedByVideoEnd) return;
-
-        if (!sourceVideo.ended && !sourceVideo.paused) {
-          const tTime = Math.min(
-            Math.max(getTimelineTime(), 0),
-            sourceVideo.duration
-          );
-
-          updateExportProgress(tTime);
-          renderExportFrame(tTime, performance.now());
-          requestAnimationFrame(renderLoop);
+      function scheduleExportRender() {
+        if (stoppedByVideoEnd || exportRenderRafId !== null || exportRenderTimerId !== null) return;
+        if (document.visibilityState === 'visible' && typeof requestAnimationFrame === 'function') {
+          exportRenderRafId = requestAnimationFrame(() => {
+            exportRenderRafId = null;
+            renderLoop();
+          });
         } else {
-          updateExportProgress(sourceVideo.duration, true);
-          stopRecorder();
+          // 非表示タブではRAFに依存しない。タイマー自体もブラウザから制限され得る。
+          exportRenderTimerId = setTimeout(() => {
+            exportRenderTimerId = null;
+            renderLoop();
+          }, 50);
         }
       }
 
-      renderLoop();
+      function renderLoop() {
+        if (stoppedByVideoEnd) return;
+
+        if (sourceVideo.ended) {
+          updateExportProgress(sourceVideo.duration, true);
+          stopRecorder();
+          return;
+        }
+
+        if (sourceVideo.paused) {
+          if (document.visibilityState === 'hidden') {
+            // 非表示時に動画が停止した場合、録画と音声時計も一時停止して時間ずれを抑える。
+            pauseExportForBackground();
+            updateExportProgress(getTimelineTime());
+            scheduleExportRender();
+            return;
+          }
+          if (pausedForBackground || exportResumeInProgress) {
+            updateExportProgress(getTimelineTime());
+            scheduleExportRender();
+            return;
+          }
+          updateExportProgress(sourceVideo.duration, true);
+          stopRecorder();
+          return;
+        }
+
+        const tTime = Math.min(Math.max(getTimelineTime(), 0), sourceVideo.duration);
+        updateExportProgress(tTime);
+        renderExportFrame(tTime, performance.now());
+        scheduleExportRender();
+      }
+
+      exportVisibilityHandler = () => {
+        if (stoppedByVideoEnd) return;
+        // 表示状態が変わったら古い予約を破棄し、現在の状態に応じて描画スケジューラを切り替える。
+        cancelScheduledExportRender();
+        if (document.visibilityState === 'hidden') {
+          if (sourceVideo.paused && !sourceVideo.ended) pauseExportForBackground();
+        } else if (pausedForBackground || (sourceVideo.paused && !sourceVideo.ended)) {
+          resumeExportFromBackground();
+        }
+        scheduleExportRender();
+      };
+      document.addEventListener('visibilitychange', exportVisibilityHandler);
+
+      scheduleExportRender();
       await finished;
+      if (exportFatalError) throw exportFatalError;
 
       sourceVideo.pause();
 
@@ -3109,6 +3311,14 @@ updateBrowserTabTitle();
       statusText.textContent = `書き出しエラー: ${err.message || err}`;
     } finally {
       if (exportProgressTimer) clearInterval(exportProgressTimer);
+      if (exportVisibilityHandler) document.removeEventListener('visibilitychange', exportVisibilityHandler);
+      if (exportEndedHandler) sourceVideo.removeEventListener('ended', exportEndedHandler);
+      if (exportRenderRafId !== null) cancelAnimationFrame(exportRenderRafId);
+      if (exportRenderTimerId !== null) clearTimeout(exportRenderTimerId);
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        try { mediaRecorder.stop(); } catch (e) {}
+      }
+      try { sourceVideo.pause(); } catch (e) {}
 
       exportAudioSourceNodes.forEach(src => {
         try { src.stop(); src.disconnect(); } catch (e) {}
@@ -3123,8 +3333,13 @@ updateBrowserTabTitle();
         exportCanvasStream.getTracks().forEach(track => track.stop());
       }
 
+      exportControls.forEach((control, index) => { control.disabled = exportControlDisabledState[index]; });
+      exportCustomSelectStyles.forEach(({ wrapper, pointerEvents, opacity }) => {
+        wrapper.style.pointerEvents = pointerEvents;
+        wrapper.style.opacity = opacity;
+      });
       exportBtn.disabled = false;
-      exportBtn.textContent = '動画を再生・合成・書き出し';
+      exportBtn.textContent = '動画を合成・書き出し';
     }
   });
 
