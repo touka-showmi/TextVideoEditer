@@ -267,6 +267,49 @@
     .custom-select-option.disabled { opacity: 0.5; cursor: not-allowed; background-color: transparent !important; color: var(--muted-text) !important; }
     .custom-select-option:last-child { border-radius: 0 0 16px 16px; }
 
+    /* カスタマイズ設定パネル */
+    .customize-modal-overlay {
+      position: fixed; inset: 0; z-index: 5000; display: none;
+      align-items: center; justify-content: center; padding: 18px;
+      background: rgba(2, 6, 23, 0.72); box-sizing: border-box;
+    }
+    .customize-modal-overlay.show { display: flex; }
+    .customize-modal {
+      width: min(760px, 100%); max-height: min(88vh, 900px); overflow: auto;
+      background: var(--card-bg); color: var(--text-color); border: 1px solid var(--border-color);
+      border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,.4); padding: 22px; box-sizing: border-box;
+    }
+    .customize-modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+    .customize-modal-header h3 { margin: 0; color: var(--accent-color); font-size: 20px; }
+    .customize-modal-description { margin: 0 0 18px; color: var(--muted-text); font-size: 13px; line-height: 1.7; }
+    .customize-section { border: 1px solid var(--border-color); border-radius: 12px; padding: 14px; margin-top: 14px; }
+    .customize-section h4 { margin: 0 0 12px; font-size: 15px; }
+    .shortcut-list { display: flex; flex-direction: column; gap: 8px; }
+    .shortcut-row { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(160px, 1fr); align-items: center; gap: 12px; }
+    .shortcut-row label { font-size: 13px; color: var(--text-color); }
+    .shortcut-capture { width: 100%; text-align: center; border: 1px solid var(--border-color); background: var(--input-bg); color: var(--input-text); border-radius: 8px; min-height: 38px; white-space: normal; }
+    .shortcut-capture.is-capturing { border-color: var(--accent-color); box-shadow: 0 0 0 2px rgba(56,189,248,.2); }
+    .customize-options { display: flex; flex-direction: column; gap: 12px; }
+    .customize-option { display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 13px; }
+    .customize-option label { color: var(--text-color); font-size: 13px; }
+    .customize-option input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-color); flex: 0 0 auto; }
+    .customize-option input[type="number"] { width: 100px; }
+    .customize-option-select { align-items: center; }
+    .customize-option-select .custom-select-wrapper { flex: 0 1 300px; width: min(300px, 55%); min-width: 180px; }
+    .customize-option-select .custom-select-trigger { width: 100%; min-width: 0; }
+    .customize-help-text { color: var(--muted-text); font-size: 12px; line-height: 1.65; margin: 10px 0 0; }
+    .customize-modal-footer { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+    .customize-status { color: var(--muted-text); font-size: 12px; margin-top: 10px; min-height: 1.4em; }
+    @media (max-width: 600px) {
+      .customize-modal { padding: 15px; }
+      .shortcut-row { grid-template-columns: 1fr; gap: 5px; }
+      .customize-option { align-items: flex-start; }
+      .customize-option-select { flex-direction: column; align-items: stretch; gap: 7px; }
+      .customize-option-select .custom-select-wrapper { flex: 1 1 auto; width: 100%; min-width: 0; }
+      .customize-modal-footer { flex-direction: column; }
+      .customize-modal-footer button { width: 100%; }
+    }
+
     @media (max-width: 600px) {
       html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
       body { padding: 8px; box-sizing: border-box; }
@@ -386,8 +429,86 @@
       <button id="importProjectBtn" class="btn-gray">プロジェクト読込(txt)</button>
       <button id="exportProjectBtn" class="btn-gray">プロジェクト書出(txt)</button>
       <button id="themeToggleBtn" class="btn-gray"> ☀ / ☽切替 </button>
+      <button id="customizeOpenBtn" class="btn-gray" aria-haspopup="dialog" aria-controls="customizeModal">⚙ カスタマイズ</button>
     </div>
     <input type="file" id="projectTxtInput" accept=".txt" style="display: none;">
+  </div>
+
+  <div id="customizeModal" class="customize-modal-overlay" role="presentation" aria-hidden="true">
+    <section class="customize-modal" role="dialog" aria-modal="true" aria-labelledby="customizeModalTitle">
+      <div class="customize-modal-header">
+        <h3 id="customizeModalTitle">⚙ カスタマイズ</h3>
+        <button id="customizeCloseBtn" class="btn-gray" type="button" aria-label="閉じる">✕ 閉じる</button>
+      </div>
+      <p class="customize-modal-description">エディタ本体の編集・合成処理は変更せず、操作方法を設定します。設定はこのブラウザに保存され、次回も引き継がれます。</p>
+
+      <div class="customize-section">
+        <h4>キーボードショートカット</h4>
+        <div class="customize-options" style="margin-bottom: 14px;">
+          <div class="customize-option"><label for="customizeShortcutsEnabled">ショートカットを有効にする</label><input type="checkbox" id="customizeShortcutsEnabled" checked></div>
+          <div class="customize-option"><label for="customizeIgnoreEditable">入力欄・セレクト操作中はショートカットを無効にする</label><input type="checkbox" id="customizeIgnoreEditable" checked></div>
+          <div class="customize-option"><label for="customizeIgnoreRepeat">キーを押し続けたときの連続実行を防ぐ</label><input type="checkbox" id="customizeIgnoreRepeat" checked></div>
+        </div>
+        <div class="shortcut-list">
+          <div class="shortcut-row"><label for="shortcutPlayPause">再生 / 一時停止</label><button type="button" class="shortcut-capture" id="shortcutPlayPause" data-shortcut="playPause">Space</button></div>
+          <div class="shortcut-row"><label for="shortcutRewind">指定秒数戻る</label><button type="button" class="shortcut-capture" id="shortcutRewind" data-shortcut="rewind">Shift + ←</button></div>
+          <div class="shortcut-row"><label for="shortcutForward">指定秒数進む</label><button type="button" class="shortcut-capture" id="shortcutForward" data-shortcut="forward">Shift + →</button></div>
+          <div class="shortcut-row"><label for="shortcutStart">動画の最初へ</label><button type="button" class="shortcut-capture" id="shortcutStart" data-shortcut="start">Ctrl + ←</button></div>
+          <div class="shortcut-row"><label for="shortcutEnd">動画の最後付近へ</label><button type="button" class="shortcut-capture" id="shortcutEnd" data-shortcut="end">Ctrl + →</button></div>
+          <div class="shortcut-row"><label for="shortcutStop">停止して最初へ</label><button type="button" class="shortcut-capture" id="shortcutStop" data-shortcut="stop">未設定</button></div>
+        </div>
+        <div id="customizeCaptureHelp" class="customize-status" aria-live="polite">各ショートカットのキー表示ボタンを押してから、割り当てたいキーの組み合わせを押してください。</div>
+      </div>
+
+      <div class="customize-section">
+        <h4>操作の動作</h4>
+        <div class="customize-options">
+          <div class="customize-option"><label for="customizeSubtitleClickSeeks">字幕をクリックしたとき、プレビューをその字幕の開始秒へ移動する</label><input type="checkbox" id="customizeSubtitleClickSeeks" checked></div>
+          <div class="customize-option"><label for="customizeSeekSeconds">早送り / 巻き戻しボタンの移動秒数</label><input type="number" id="customizeSeekSeconds" min="0.1" max="600" step="0.5" value="5"></div>
+        </div>
+        <p class="customize-help-text">移動秒数は 0.1〜600 秒で指定できます。変更後は「設定を保存」を押すと、プレビュー操作とショートカットの両方に反映されます。</p>
+      </div>
+
+      <div class="customize-section">
+        <h4>ファイル読み込み時の動作</h4>
+        <div class="customize-options">
+          <div class="customize-option customize-option-select">
+            <label for="customizeSubtitleImportMode">字幕 TXT を読み込むとき</label>
+            <select id="customizeSubtitleImportMode">
+              <option value="replace">既存の字幕を置き換える</option>
+              <option value="append">既存の字幕に追加する</option>
+            </select>
+          </div>
+          <div class="customize-option customize-option-select">
+            <label for="customizeAudioTrackImportMode">音声トラック TXT を読み込むとき</label>
+            <select id="customizeAudioTrackImportMode">
+              <option value="replace">既存の効果音トラックを置き換える</option>
+              <option value="append">既存の効果音トラックに追加する</option>
+            </select>
+          </div>
+          <div class="customize-option customize-option-select">
+            <label for="customizeAudioFilesImportMode">MP3 / WAV ファイルを読み込むとき</label>
+            <select id="customizeAudioFilesImportMode">
+              <option value="replace">既存の音源と効果音トラックを置き換える</option>
+              <option value="append">既存の音源に追加する</option>
+            </select>
+          </div>
+        </div>
+        <p class="customize-help-text">「置き換える」は対象の既存データを入れ替えます。「追加する」は既存データを残します。MP3 / WAV の置き換えでは、以前の音源一覧と、それらを使っている効果音トラックもクリアしてから新しい音源を登録します。読み込みに成功した音源がない場合、既存データは保持されます。</p>
+      </div>
+
+      <div class="customize-modal-footer" style="justify-content: flex-start;">
+        <button type="button" id="customizeExportSettingsBtn" class="btn-gray">設定を書き出し（JSON）</button>
+        <button type="button" id="customizeImportSettingsBtn" class="btn-gray">設定を読み込み（JSON）</button>
+        <input type="file" id="customizeSettingsInput" accept=".json,application/json" style="display: none;">
+      </div>
+      <p class="customize-help-text">書き出しは現在の設定画面の内容をJSONファイルとして保存します。読み込んだ設定は内容確認用として表示され、「設定を保存」を押すまでエディタには反映されません。</p>
+      <div class="customize-modal-footer">
+        <button type="button" id="customizeResetBtn" class="btn-gray">初期設定に戻す</button>
+        <button type="button" id="customizeSaveBtn">設定を保存</button>
+      </div>
+      <div id="customizeSaveStatus" class="customize-status" role="status" aria-live="polite"></div>
+    </section>
   </div>
 
   <div class="control-group">
@@ -435,6 +556,7 @@
           <button id="importTxtBtn" class="btn-gray">読込(txt)</button>
           <button id="exportTxtBtn" class="btn-gray">書出(txt)</button>
           <button id="sortTelopBtn" class="btn-gray">開始秒で並び替え</button>
+          <button id="setTelopEndToNextStartBtn" class="btn-gray" title="各字幕の終了秒を、次に開始する字幕の開始秒へ一括設定します">終了秒を次の開始秒に一括設定</button>
           <input type="file" id="txtInput" accept=".txt" style="display: none;">
           <button id="addTelopBtn" class="btn-add">+ 追加</button>
         </div>
@@ -1053,7 +1175,10 @@ updateBrowserTabTitle();
         </div>
       `;
       item.addEventListener('click', () => {
-        selectedTelopId = t.id; renderTelopListUI(); updateTelopFormValues(); drawPreviewAtTime(t.startTime);
+        selectedTelopId = t.id;
+        renderTelopListUI();
+        updateTelopFormValues();
+        if (customization.subtitleClickSeeksToStart) drawPreviewAtTime(t.startTime);
       });
       telopListContainer.appendChild(item);
     });
@@ -1168,6 +1293,7 @@ updateBrowserTabTitle();
 
     const ctx = getAudioContext();
     let loadedCount = 0;
+    const newlyLoadedAudioFiles = [];
     const failedFiles = [];
     const skippedFiles = [];
 
@@ -1185,7 +1311,7 @@ updateBrowserTabTitle();
         const arrayBuffer = await file.arrayBuffer();
         const decodedBuffer = await ctx.decodeAudioData(arrayBuffer);
 
-        loadedAudioPool.push({
+        newlyLoadedAudioFiles.push({
           id: Date.now() + Math.random(),
           name: file.name,
           buffer: decodedBuffer
@@ -1199,12 +1325,29 @@ updateBrowserTabTitle();
       }
     }
 
+    // 「置き換え」は少なくとも1件のデコードに成功した場合だけ適用する。
+    // 既存トラックは読み込んだ音源のバッファを参照しているため、置き換え時にはまとめて整理する。
+    let audioFileImportAction = '追加';
+    if (loadedCount > 0) {
+      if (customization.audioFilesImportMode === 'replace') {
+        stopAllActiveAudioSources();
+        loadedAudioPool = newlyLoadedAudioFiles;
+        audioList = [];
+        selectedAudioId = null;
+        renderAudioListUI();
+        updateAudioFormValues();
+        audioFileImportAction = '既存の音源と効果音トラックを置き換え';
+      } else {
+        loadedAudioPool.push(...newlyLoadedAudioFiles);
+        audioFileImportAction = '既存の音源に追加';
+      }
+    }
     updateAudioPoolSelectUI();
     audioFileInput.value = '';
 
     const messages = [];
     if (loadedCount > 0) {
-      messages.push(`${loadedCount}件の音声ファイルをロードしました。音声欄から追加できます。`);
+      messages.push(`${loadedCount}件の音声ファイルをロードしました（${audioFileImportAction}）。音声欄からトラックに追加できます。`);
     }
 
     if (failedFiles.length > 0) {
@@ -1640,6 +1783,59 @@ updateBrowserTabTitle();
     statusText.textContent = '字幕を開始秒順に並び替えました';
   });
 
+  // 各字幕の終了秒を、次に開始する字幕の開始秒へ一括で合わせる。
+  // 同じ開始秒の字幕はひとまとまりとして扱い、次の「より大きい」開始秒を適用する。
+  // 最も遅い開始秒の字幕群には次の開始秒が存在しないため、終了秒を変更しない。
+  document.getElementById('setTelopEndToNextStartBtn').addEventListener('click', () => {
+    if (telopList.length < 2) {
+      alert('この操作には字幕が2件以上必要です。');
+      return;
+    }
+
+    const validStarts = telopList
+      .map(t => Number(t.startTime))
+      .filter(start => Number.isFinite(start))
+      .sort((a, b) => a - b);
+    const distinctStarts = [...new Set(validStarts)];
+    if (distinctStarts.length < 2) {
+      alert('字幕の開始秒がすべて同じため、変換できる字幕がありません。');
+      return;
+    }
+
+    const nextStartByStart = new Map();
+    distinctStarts.forEach((start, index) => {
+      if (index < distinctStarts.length - 1) {
+        nextStartByStart.set(start, distinctStarts[index + 1]);
+      }
+    });
+
+    const eligibleCount = telopList.filter(t => nextStartByStart.has(Number(t.startTime))).length;
+    const unchangedLastGroupCount = telopList.length - eligibleCount;
+    const shouldApply = confirm(
+      '各字幕の終了秒を、次に開始する字幕の開始秒へ一括設定します。\n\n' +
+      `変換対象: ${eligibleCount}件\n` +
+      `次の開始秒がないため変更しない字幕: ${unchangedLastGroupCount}件\n\n` +
+      '実行しますか？'
+    );
+    if (!shouldApply) return;
+
+    let changedCount = 0;
+    telopList.forEach(t => {
+      const currentStart = Number(t.startTime);
+      const nextStart = nextStartByStart.get(currentStart);
+      if (!Number.isFinite(currentStart) || nextStart === undefined) return;
+
+      if (Number(t.endTime) !== nextStart) changedCount++;
+      t.endTime = nextStart;
+    });
+
+    renderTelopListUI();
+    updateTelopFormValues();
+    // プレビュー位置は変えず、現在位置の字幕表示だけを更新する。
+    if (!isPreviewPlaying) drawPreviewAtTime(Number(sourceVideo.currentTime) || 0);
+    statusText.textContent = `字幕の終了秒を一括設定しました（終了秒を変更した字幕: ${changedCount}件、変更対象: ${eligibleCount}件）`;
+  });
+
   document.getElementById('txtInput').addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1650,12 +1846,16 @@ updateBrowserTabTitle();
         alert('有効な字幕データが見つかりませんでした。');
         return;
       }
-      telopList = parsed;
-      selectedTelopId = telopList[0].id;
+      const existingTelops = customization.subtitleImportMode === 'append' ? telopList : [];
+      const firstNewId = existingTelops.reduce((maxId, item) => Math.max(maxId, Number(item.id) || 0), 0) + 1;
+      const importedTelops = parsed.map((item, index) => ({ ...item, id: firstNewId + index }));
+      telopList = existingTelops.concat(importedTelops);
+      selectedTelopId = importedTelops[0].id;
       renderTelopListUI();
       updateTelopFormValues();
-      drawPreviewAtTime(telopList[0].startTime);
-      statusText.textContent = `${telopList.length}件の字幕をインポートしました（フォント・位置・角度・終了時間を保持）`;
+      drawPreviewAtTime(importedTelops[0].startTime);
+      const importAction = customization.subtitleImportMode === 'append' ? '既存の字幕に追加' : '既存の字幕を置き換え';
+      statusText.textContent = `${importedTelops.length}件の字幕を読み込みました（${importAction} / 合計 ${telopList.length}件。フォント・位置・角度・終了時間を保持）`;
     } catch (err) {
       console.error(err);
       alert('字幕txtの読み込みに失敗しました。');
@@ -1706,7 +1906,13 @@ updateBrowserTabTitle();
         loadedTracks.push({ id: Date.now() + index + Math.random(), name: fileName, buffer, startTime, endTime: parseTimecode(match[2]), volume: volumeVal });
       }
       if (!loadedTracks.length) { alert('有効な音声データが見つかりませんでした。'); return; }
-      audioList = audioList.concat(loadedTracks); selectedAudioId = loadedTracks[0].id; renderAudioListUI(); updateAudioFormValues(); statusText.textContent = `${loadedTracks.length}件の音声トラックをインポートしました`;
+      const replaceExistingTracks = customization.audioTrackImportMode === 'replace';
+      if (replaceExistingTracks) stopAllActiveAudioSources();
+      audioList = replaceExistingTracks ? loadedTracks : audioList.concat(loadedTracks);
+      selectedAudioId = loadedTracks[0].id;
+      renderAudioListUI();
+      updateAudioFormValues();
+      statusText.textContent = `${loadedTracks.length}件の音声トラックを読み込みました（${replaceExistingTracks ? '既存トラックを置き換え' : '既存トラックに追加'} / 合計 ${audioList.length}件）`;
     } catch (err) { console.error(err); alert('音声txtの読み込みに失敗しました。'); statusText.textContent = '音声txt読み込みエラー'; } finally { audioTxtInput.value = ''; }
   });
 
@@ -1892,8 +2098,8 @@ updateBrowserTabTitle();
     const base = Number.isFinite(sourceVideo.currentTime) ? sourceVideo.currentTime : 0;
     drawPreviewAtTime(Math.max(0, Math.min(base + offset, duration || base + offset)));
   }
-  btnRewind.addEventListener('click', () => skipTime(-5));
-  btnForward.addEventListener('click', () => skipTime(5));
+  btnRewind.addEventListener('click', () => skipTime(-customization.seekSeconds));
+  btnForward.addEventListener('click', () => skipTime(customization.seekSeconds));
   btnStart.addEventListener('click', () => drawPreviewAtTime(0));
   btnEnd.addEventListener('click', () => {
     const duration = getVideoDuration();
@@ -1907,49 +2113,456 @@ updateBrowserTabTitle();
     drawPreviewAtTime(ratio * duration);
   });
 
-  // キーボードショートカット
-  // Space: 再生 / 一時停止
-  // Ctrl + ← / →: 最初 / 最後へジャンプ
-  // Shift + ← / →: 5秒戻る / 5秒進む
+  // カスタマイズ設定。既存の編集・合成ロジックには触れず、入力操作の窓口だけを設定可能にする。
+  const CUSTOMIZATION_STORAGE_KEY = 'textVideoEditor.customization.v1';
+  const defaultCustomization = {
+    shortcutsEnabled: true,
+    ignoreEditable: true,
+    ignoreRepeat: true,
+    seekSeconds: 5,
+    subtitleClickSeeksToStart: true,
+    subtitleImportMode: 'replace',
+    audioTrackImportMode: 'append',
+    audioFilesImportMode: 'append',
+    shortcuts: {
+      playPause: { code: 'Space', ctrl: false, alt: false, shift: false, meta: false },
+      rewind: { code: 'ArrowLeft', ctrl: false, alt: false, shift: true, meta: false },
+      forward: { code: 'ArrowRight', ctrl: false, alt: false, shift: true, meta: false },
+      start: { code: 'ArrowLeft', ctrl: true, alt: false, shift: false, meta: false },
+      end: { code: 'ArrowRight', ctrl: true, alt: false, shift: false, meta: false },
+      stop: null
+    }
+  };
+  let customization = loadCustomization();
+  let customizationDraft = JSON.parse(JSON.stringify(customization));
+  let capturingShortcutId = null;
+  const customizeModal = document.getElementById('customizeModal');
+  const customizeOpenBtn = document.getElementById('customizeOpenBtn');
+  const customizeCloseBtn = document.getElementById('customizeCloseBtn');
+  const customizeSaveBtn = document.getElementById('customizeSaveBtn');
+  const customizeResetBtn = document.getElementById('customizeResetBtn');
+  const customizeExportSettingsBtn = document.getElementById('customizeExportSettingsBtn');
+  const customizeImportSettingsBtn = document.getElementById('customizeImportSettingsBtn');
+  const customizeSettingsInput = document.getElementById('customizeSettingsInput');
+  const customizeSaveStatus = document.getElementById('customizeSaveStatus');
+  const customizeCaptureHelp = document.getElementById('customizeCaptureHelp');
+  const shortcutButtons = Array.from(document.querySelectorAll('[data-shortcut]'));
+  const customizeShortcutsEnabled = document.getElementById('customizeShortcutsEnabled');
+  const customizeIgnoreEditable = document.getElementById('customizeIgnoreEditable');
+  const customizeIgnoreRepeat = document.getElementById('customizeIgnoreRepeat');
+  const customizeSeekSeconds = document.getElementById('customizeSeekSeconds');
+  const customizeSubtitleClickSeeks = document.getElementById('customizeSubtitleClickSeeks');
+  const customizeSubtitleImportMode = document.getElementById('customizeSubtitleImportMode');
+  const customizeAudioTrackImportMode = document.getElementById('customizeAudioTrackImportMode');
+  const customizeAudioFilesImportMode = document.getElementById('customizeAudioFilesImportMode');
+  const customizationModeControls = [customizeSubtitleImportMode, customizeAudioTrackImportMode, customizeAudioFilesImportMode];
+
+  function cloneDefaultCustomization() {
+    return JSON.parse(JSON.stringify(defaultCustomization));
+  }
+
+  function loadCustomization() {
+    const base = cloneDefaultCustomization();
+    try {
+      const saved = JSON.parse(localStorage.getItem(CUSTOMIZATION_STORAGE_KEY) || 'null');
+      if (!saved || typeof saved !== 'object') return base;
+      base.shortcutsEnabled = saved.shortcutsEnabled !== false;
+      base.ignoreEditable = saved.ignoreEditable !== false;
+      base.ignoreRepeat = saved.ignoreRepeat !== false;
+      const seconds = Number(saved.seekSeconds);
+      if (Number.isFinite(seconds)) base.seekSeconds = Math.max(0.1, Math.min(600, seconds));
+      base.subtitleClickSeeksToStart = saved.subtitleClickSeeksToStart !== false;
+      if (saved.subtitleImportMode === 'replace' || saved.subtitleImportMode === 'append') {
+        base.subtitleImportMode = saved.subtitleImportMode;
+      }
+      if (saved.audioTrackImportMode === 'replace' || saved.audioTrackImportMode === 'append') {
+        base.audioTrackImportMode = saved.audioTrackImportMode;
+      }
+      if (saved.audioFilesImportMode === 'replace' || saved.audioFilesImportMode === 'append') {
+        base.audioFilesImportMode = saved.audioFilesImportMode;
+      }
+      if (saved.shortcuts && typeof saved.shortcuts === 'object') {
+        Object.keys(base.shortcuts).forEach(id => {
+          const value = saved.shortcuts[id];
+          if (value === null) { base.shortcuts[id] = null; return; }
+          if (value && typeof value.code === 'string' && value.code) {
+            base.shortcuts[id] = {
+              code: value.code,
+              ctrl: !!value.ctrl, alt: !!value.alt, shift: !!value.shift, meta: !!value.meta
+            };
+          }
+        });
+      }
+    } catch (error) {
+      console.warn('カスタマイズ設定を読み込めませんでした。初期設定を使用します。', error);
+    }
+    return base;
+  }
+
+  function shortcutToLabel(shortcut) {
+    if (!shortcut) return '未設定';
+    const parts = [];
+    if (shortcut.ctrl) parts.push('Ctrl');
+    if (shortcut.alt) parts.push('Alt');
+    if (shortcut.shift) parts.push('Shift');
+    if (shortcut.meta) parts.push('⌘');
+    const keyLabels = {
+      Space: 'Space', ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓',
+      Enter: 'Enter', Escape: 'Esc', Tab: 'Tab', Backspace: 'Backspace', Delete: 'Delete',
+      Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown'
+    };
+    let keyLabel = keyLabels[shortcut.code] || shortcut.code.replace(/^Key/, '').replace(/^Digit/, '');
+    if (shortcut.code.startsWith('Numpad')) keyLabel = `Num ${shortcut.code.slice(6)}`;
+    parts.push(keyLabel);
+    return parts.join(' + ');
+  }
+
+  function updateSeekActionLabels() {
+    btnRewind.title = `${customization.seekSeconds}秒戻る`;
+    btnForward.title = `${customization.seekSeconds}秒進む`;
+  }
+
+  function renderCustomizationControls() {
+    customizeShortcutsEnabled.checked = customizationDraft.shortcutsEnabled;
+    customizeIgnoreEditable.checked = customizationDraft.ignoreEditable;
+    customizeIgnoreRepeat.checked = customizationDraft.ignoreRepeat;
+    customizeSeekSeconds.value = String(customizationDraft.seekSeconds);
+    customizeSubtitleClickSeeks.checked = customizationDraft.subtitleClickSeeksToStart;
+    customizeSubtitleImportMode.value = customizationDraft.subtitleImportMode;
+    customizeAudioTrackImportMode.value = customizationDraft.audioTrackImportMode;
+    customizeAudioFilesImportMode.value = customizationDraft.audioFilesImportMode;
+    customizationModeControls.forEach(updateCustomSelectDisplay);
+    shortcutButtons.forEach(button => {
+      const shortcut = customizationDraft.shortcuts[button.dataset.shortcut];
+      button.textContent = capturingShortcutId === button.dataset.shortcut ? 'キーを押してください…' : shortcutToLabel(shortcut);
+      button.classList.toggle('is-capturing', capturingShortcutId === button.dataset.shortcut);
+      button.setAttribute('aria-label', `${button.closest('.shortcut-row').querySelector('label').textContent}: ${button.textContent}。押して変更`);
+    });
+  }
+
+  // フォームの現在値を設定ドラフトへ読み取る。保存・書き出しで同じ検証を使う。
+  function readCustomizationDraftFromControls() {
+    const seconds = Number(customizeSeekSeconds.value);
+    if (!Number.isFinite(seconds) || seconds < 0.1 || seconds > 600) {
+      customizeSaveStatus.textContent = '移動秒数は 0.1〜600 の範囲で入力してください。';
+      customizeSeekSeconds.focus();
+      return null;
+    }
+    customizationDraft.shortcutsEnabled = customizeShortcutsEnabled.checked;
+    customizationDraft.ignoreEditable = customizeIgnoreEditable.checked;
+    customizationDraft.ignoreRepeat = customizeIgnoreRepeat.checked;
+    customizationDraft.subtitleClickSeeksToStart = customizeSubtitleClickSeeks.checked;
+    customizationDraft.subtitleImportMode = customizeSubtitleImportMode.value === 'append' ? 'append' : 'replace';
+    customizationDraft.audioTrackImportMode = customizeAudioTrackImportMode.value === 'replace' ? 'replace' : 'append';
+    customizationDraft.audioFilesImportMode = customizeAudioFilesImportMode.value === 'replace' ? 'replace' : 'append';
+    customizationDraft.seekSeconds = seconds;
+    return JSON.parse(JSON.stringify(customizationDraft));
+  }
+
+  function saveCustomization(showMessage = true) {
+    const nextCustomization = readCustomizationDraftFromControls();
+    if (!nextCustomization) return false;
+    try {
+      localStorage.setItem(CUSTOMIZATION_STORAGE_KEY, JSON.stringify(nextCustomization));
+      customization = nextCustomization;
+      customizationDraft = JSON.parse(JSON.stringify(nextCustomization));
+      updateSeekActionLabels();
+      if (showMessage) customizeSaveStatus.textContent = '設定を保存しました。このブラウザで次回も使用されます。';
+      return true;
+    } catch (error) {
+      customizeSaveStatus.textContent = '設定を保存できませんでした。ブラウザの保存領域を確認してください。';
+      console.warn('カスタマイズ設定の保存に失敗しました。', error);
+      return false;
+    }
+  }
+
+  const CUSTOMIZATION_FILE_FORMAT = 'TextVideoEditer.customization';
+  const CUSTOMIZATION_FILE_VERSION = 1;
+
+  function isForbiddenImportedShortcut(shortcut) {
+    if (!shortcut) return false;
+    return ['F5', 'F11', 'F12', 'Tab'].includes(shortcut.code) ||
+      (shortcut.code === 'KeyR' && shortcut.ctrl) ||
+      (shortcut.code === 'KeyW' && shortcut.ctrl) ||
+      (shortcut.code === 'KeyT' && shortcut.ctrl);
+  }
+
+  function normalizeImportedCustomizationFile(fileData) {
+    if (!fileData || typeof fileData !== 'object' || Array.isArray(fileData) ||
+        fileData.format !== CUSTOMIZATION_FILE_FORMAT ||
+        fileData.formatVersion !== CUSTOMIZATION_FILE_VERSION ||
+        !fileData.settings || typeof fileData.settings !== 'object' || Array.isArray(fileData.settings)) {
+      throw new Error('このエディタで書き出した、対応バージョンの設定JSONを選択してください。');
+    }
+
+    const raw = fileData.settings;
+    const result = cloneDefaultCustomization();
+    ['shortcutsEnabled', 'ignoreEditable', 'ignoreRepeat', 'subtitleClickSeeksToStart'].forEach(key => {
+      if (typeof raw[key] !== 'boolean') throw new Error(`設定「${key}」の値が正しくありません。`);
+      result[key] = raw[key];
+    });
+
+    const seconds = Number(raw.seekSeconds);
+    if (typeof raw.seekSeconds !== 'number' || !Number.isFinite(seconds) || seconds < 0.1 || seconds > 600) {
+      throw new Error('早送り / 巻き戻し秒数は 0.1〜600 の数値である必要があります。');
+    }
+    result.seekSeconds = seconds;
+
+    const validModes = {
+      subtitleImportMode: ['replace', 'append'],
+      audioTrackImportMode: ['replace', 'append'],
+      audioFilesImportMode: ['replace', 'append']
+    };
+    Object.entries(validModes).forEach(([key, allowed]) => {
+      if (!allowed.includes(raw[key])) throw new Error(`設定「${key}」の値が正しくありません。`);
+      result[key] = raw[key];
+    });
+
+    if (!raw.shortcuts || typeof raw.shortcuts !== 'object' || Array.isArray(raw.shortcuts)) {
+      throw new Error('ショートカット設定が見つからないか、形式が正しくありません。');
+    }
+    Object.keys(result.shortcuts).forEach(id => {
+      if (!Object.prototype.hasOwnProperty.call(raw.shortcuts, id)) {
+        throw new Error(`ショートカット「${id}」の設定がありません。`);
+      }
+      const value = raw.shortcuts[id];
+      if (value === null) {
+        result.shortcuts[id] = null;
+        return;
+      }
+      if (!value || typeof value !== 'object' || Array.isArray(value) ||
+          typeof value.code !== 'string' || !/^[A-Za-z0-9]{1,64}$/.test(value.code)) {
+        throw new Error(`ショートカット「${id}」のキー指定が正しくありません。`);
+      }
+      ['ctrl', 'alt', 'shift', 'meta'].forEach(modifier => {
+        if (typeof value[modifier] !== 'boolean') {
+          throw new Error(`ショートカット「${id}」の修飾キー設定が正しくありません。`);
+        }
+      });
+      const shortcut = {
+        code: value.code,
+        ctrl: value.ctrl,
+        alt: value.alt,
+        shift: value.shift,
+        meta: value.meta
+      };
+      if (isForbiddenImportedShortcut(shortcut)) {
+        throw new Error(`ショートカット「${id}」にブラウザ操作と競合するキーが割り当てられています。`);
+      }
+      result.shortcuts[id] = shortcut;
+    });
+
+    const assigned = Object.entries(result.shortcuts).filter(([, shortcut]) => shortcut);
+    for (let i = 0; i < assigned.length; i++) {
+      for (let j = i + 1; j < assigned.length; j++) {
+        if (shortcutsEqual(assigned[i][1], assigned[j][1])) {
+          throw new Error(`ショートカット「${assigned[i][0]}」と「${assigned[j][0]}」が重複しています。設定ファイルを確認してください。`);
+        }
+      }
+    }
+    return result;
+  }
+
+  function exportCustomizationSettings() {
+    if (capturingShortcutId) {
+      customizeSaveStatus.textContent = '先にショートカットのキー割り当てを確定またはキャンセルしてください。';
+      return;
+    }
+    const settings = readCustomizationDraftFromControls();
+    if (!settings) return;
+    const fileData = {
+      format: CUSTOMIZATION_FILE_FORMAT,
+      formatVersion: CUSTOMIZATION_FILE_VERSION,
+      exportedAt: new Date().toISOString(),
+      settings
+    };
+    const blob = new Blob([JSON.stringify(fileData, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStamp = new Date().toLocaleDateString('sv-SE').replace(/-/g, '');
+    link.href = url;
+    link.download = `TextVideoEditer_customization_${dateStamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    customizeSaveStatus.textContent = '現在の設定画面の内容を書き出しました。書き出しはエディタへの適用・保存を行いません。';
+  }
+
+  async function importCustomizationSettings(file) {
+    if (!file) return;
+    try {
+      if (file.size > 1024 * 1024) throw new Error('設定ファイルが大きすぎます（1MB以下のJSONを選択してください）。');
+      const parsed = JSON.parse(await file.text());
+      const imported = normalizeImportedCustomizationFile(parsed);
+      customizationDraft = imported;
+      capturingShortcutId = null;
+      renderCustomizationControls();
+      customizeSaveStatus.textContent = '設定ファイルを読み込みました。まだ反映されていません。内容を確認して「設定を保存」を押してください。';
+      customizeCaptureHelp.textContent = '設定ファイルからショートカットを読み込みました。キーを変更する場合は各キー表示ボタンを押してください。';
+    } catch (error) {
+      customizeSaveStatus.textContent = `設定ファイルを読み込めませんでした：${error.message || error}`;
+      console.warn('カスタマイズ設定の読み込みに失敗しました。', error);
+    } finally {
+      customizeSettingsInput.value = '';
+    }
+  }
+
+  function openCustomizationModal() {
+    capturingShortcutId = null;
+    customizationDraft = JSON.parse(JSON.stringify(customization));
+    renderCustomizationControls();
+    customizeSaveStatus.textContent = '';
+    customizeCaptureHelp.textContent = '各ショートカットのキー表示ボタンを押してから、割り当てたいキーの組み合わせを押してください。未設定にするには、設定中に Backspace または Delete を押します。';
+    customizeModal.classList.add('show');
+    customizeModal.setAttribute('aria-hidden', 'false');
+    customizeCloseBtn.focus();
+  }
+
+  function closeCustomizationModal() {
+    capturingShortcutId = null;
+    renderCustomizationControls();
+    customizeModal.classList.remove('show');
+    customizeModal.setAttribute('aria-hidden', 'true');
+    customizeOpenBtn.focus();
+  }
+
+  function shortcutsEqual(a, b) {
+    return !!a && !!b && a.code === b.code && a.ctrl === b.ctrl && a.alt === b.alt && a.shift === b.shift && a.meta === b.meta;
+  }
+
+  function keyEventToShortcut(e) {
+    if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return null;
+    if (e.code === 'Escape') return { cancel: true };
+    if (e.code === 'Backspace' || e.code === 'Delete') return { unset: true };
+    return { code: e.code || e.key, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, meta: e.metaKey };
+  }
+
+  function handleShortcutCapture(e, shortcutId) {
+    if (capturingShortcutId !== shortcutId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const captured = keyEventToShortcut(e);
+    if (!captured) return;
+    if (captured.cancel) {
+      capturingShortcutId = null;
+      customizeCaptureHelp.textContent = 'キーの変更をキャンセルしました。';
+      renderCustomizationControls();
+      return;
+    }
+    if (captured.unset) {
+      customizationDraft.shortcuts[shortcutId] = null;
+      capturingShortcutId = null;
+      renderCustomizationControls();
+      customizeCaptureHelp.textContent = 'この操作のショートカットを未設定にしました。';
+      return;
+    }
+    // ブラウザの主要操作や単独の編集キーを誤って割り当てないようにする。
+    if (isForbiddenImportedShortcut(captured)) {
+      customizeCaptureHelp.textContent = 'そのキーはブラウザ操作と競合するため割り当てできません。別のキーを押してください。';
+      return;
+    }
+    const conflict = Object.entries(customizationDraft.shortcuts).find(([id, shortcut]) => id !== shortcutId && shortcutsEqual(shortcut, captured));
+    if (conflict) {
+      const conflictButton = shortcutButtons.find(button => button.dataset.shortcut === conflict[0]);
+      const conflictName = conflictButton ? conflictButton.closest('.shortcut-row').querySelector('label').textContent : conflict[0];
+      customizeCaptureHelp.textContent = `この組み合わせは「${conflictName}」に使用されています。別のキーを押してください。`;
+      return;
+    }
+    customizationDraft.shortcuts[shortcutId] = captured;
+    capturingShortcutId = null;
+    renderCustomizationControls();
+    customizeCaptureHelp.textContent = `割り当てを変更しました：${shortcutToLabel(captured)}。反映するには「設定を保存」を押してください。`;
+  }
+
+  customizeOpenBtn.addEventListener('click', openCustomizationModal);
+  customizeCloseBtn.addEventListener('click', closeCustomizationModal);
+  customizeExportSettingsBtn.addEventListener('click', exportCustomizationSettings);
+  customizeImportSettingsBtn.addEventListener('click', () => {
+    if (capturingShortcutId) {
+      capturingShortcutId = null;
+      renderCustomizationControls();
+    }
+    customizeSettingsInput.value = '';
+    customizeSettingsInput.click();
+  });
+  customizeSettingsInput.addEventListener('change', event => {
+    const file = event.target.files && event.target.files[0];
+    importCustomizationSettings(file);
+  });
+  customizeModal.addEventListener('click', e => {
+    if (e.target === customizeModal) closeCustomizationModal();
+  });
+  shortcutButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      capturingShortcutId = button.dataset.shortcut;
+      renderCustomizationControls();
+      customizeCaptureHelp.textContent = '割り当てたいキーの組み合わせを押してください（Escでキャンセル、Backspace / Deleteで未設定）。';
+      button.focus();
+    });
+    button.addEventListener('keydown', e => handleShortcutCapture(e, button.dataset.shortcut));
+  });
+  customizeSaveBtn.addEventListener('click', () => {
+    if (capturingShortcutId) {
+      customizeSaveStatus.textContent = '先にショートカットのキー割り当てを確定またはキャンセルしてください。';
+      return;
+    }
+    if (saveCustomization()) closeCustomizationModal();
+  });
+  customizeResetBtn.addEventListener('click', () => {
+    customizationDraft = cloneDefaultCustomization();
+    capturingShortcutId = null;
+    renderCustomizationControls();
+    customizeSaveStatus.textContent = '初期設定を表示中です。「設定を保存」を押すと保存されます。';
+  });
+  [customizeShortcutsEnabled, customizeIgnoreEditable, customizeIgnoreRepeat, customizeSeekSeconds, customizeSubtitleClickSeeks, ...customizationModeControls].forEach(control => {
+    control.addEventListener('change', () => { customizeSaveStatus.textContent = '未保存の変更があります。'; });
+  });
+  renderCustomizationControls();
+  updateSeekActionLabels();
+
+  // カスタマイズされたショートカットを既存のプレイヤー操作へ振り分ける。
   document.addEventListener('keydown', (e) => {
+    if (capturingShortcutId || !customization.shortcutsEnabled) return;
+    if (customization.ignoreRepeat && e.repeat) return;
+
     const target = e.target;
     const tagName = target && target.tagName ? target.tagName.toLowerCase() : '';
     const isEditable = !!(target && (target.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select'));
+    if (customization.ignoreEditable && isEditable) return;
+    if (customizeModal.classList.contains('show')) return;
 
-    // 入力欄では通常の文字入力・カーソル移動を優先する。
-    if (isEditable) return;
+    const pressed = { code: e.code || e.key, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, meta: e.metaKey };
+    const action = Object.entries(customization.shortcuts).find(([, shortcut]) => shortcutsEqual(shortcut, pressed));
+    if (!action) return;
 
-    if (e.code === 'Space' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
-      e.preventDefault();
-      if (!sourceVideo.src) return;
-      btnPlayPause.click();
-      return;
-    }
-
-    if (e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
+    e.preventDefault();
+    switch (action[0]) {
+      case 'playPause':
+        if (sourceVideo.src) btnPlayPause.click();
+        break;
+      case 'rewind':
+        skipTime(-customization.seekSeconds);
+        break;
+      case 'forward':
+        skipTime(customization.seekSeconds);
+        break;
+      case 'start':
         btnStart.click();
-        return;
-      }
-      if (e.key === 'ArrowRight') {
-        e.preventDefault();
+        break;
+      case 'end':
         btnEnd.click();
-        return;
-      }
+        break;
+      case 'stop':
+        btnStop.click();
+        break;
     }
+  });
 
-    if (e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        skipTime(-5);
-        return;
-      }
-      if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        skipTime(5);
-        return;
-      }
+  // Escapeで設定ダイアログを閉じる（ショートカット割り当て中を除く）。
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && customizeModal.classList.contains('show') && !capturingShortcutId) {
+      closeCustomizationModal();
     }
   });
 
